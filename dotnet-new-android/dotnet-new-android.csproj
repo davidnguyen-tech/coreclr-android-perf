@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <RootNamespace>dotnet_new_android</RootNamespace>
     <OutputType>Exe</OutputType>
@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
-    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\profiles\coreclr_startup_pgo_profile.mibc" />
+    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\profiles\*.mibc" />
   </ItemGroup>
   <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
     <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>

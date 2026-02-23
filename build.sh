@@ -64,8 +64,8 @@ for ((i=1; i<=REPEAT_COUNT; i++)); do
     logfile="$SAMPLE_APP/msbuild_$timestamp.binlog"
     SAVE_OUTPUT_PATH="$BUILD_DIR/$SAMPLE_APP"_"$timestamp"
 
-    echo "Building $SAMPLE_APP with $RUNTIME runtime via: ${LOCAL_DOTNET} build -c Release -f net10.0-android -r android-arm64 -bl:$logfile "$SAMPLE_APP/$SAMPLE_APP.csproj" $RUNTIME_SPECIFIC_ARGS $RUN_TARGET"
-    ${LOCAL_DOTNET} build -c Release -f net10.0-android -r android-arm64 -bl:$logfile "$SAMPLE_APP/$SAMPLE_APP.csproj" $RUNTIME_SPECIFIC_ARGS $RUN_TARGET
+    echo "Building $SAMPLE_APP with $RUNTIME runtime via: ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 -bl:$logfile "$SAMPLE_APP/$SAMPLE_APP.csproj" $RUNTIME_SPECIFIC_ARGS $RUN_TARGET"
+    ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 -bl:$logfile "$SAMPLE_APP/$SAMPLE_APP.csproj" $RUNTIME_SPECIFIC_ARGS $RUN_TARGET
 
     mkdir -p "$SAVE_OUTPUT_PATH"
     cp -r "$SAMPLE_APP/bin" "$SAVE_OUTPUT_PATH/"

@@ -7,7 +7,7 @@
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
     <RunAOTCompilation>True</RunAOTCompilation>
     <AndroidEnableProfiledAot>False</AndroidEnableProfiledAot>
   </PropertyGroup>
@@ -15,20 +15,20 @@
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'JIT'">
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
     <RunAOTCompilation>False</RunAOTCompilation>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R'">
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <AndroidEnableMarshalMethods>False</AndroidEnableMarshalMethods>
@@ -37,7 +37,7 @@
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
@@ -47,7 +47,7 @@
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFramework>net11.0-android</TargetFramework>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>

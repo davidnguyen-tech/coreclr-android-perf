@@ -48,9 +48,9 @@ mkdir "$BUILD_DIR"
 # Install the latest SDK build if it doesn't exist
 if [ ! -d "$DOTNET_DIR" ]; then
     # Do a dry run to get the version and store it in the log
-    VERSION=$("$DOTNET_INSTALL_SCRIPT" -c "10.0.1xx-ub" -q daily -i "$DOTNET_DIR" -DryRun | grep -oE 'version "[^"]+"' | cut -d'"' -f2)
+    VERSION=$("$DOTNET_INSTALL_SCRIPT" -c "11.0.1xx" -q daily -i "$DOTNET_DIR" -DryRun | grep -oE 'version "[^"]+"' | cut -d'"' -f2)
     echo "dotnet sdk: $VERSION" > $VERSIONS_LOG
-    "$DOTNET_INSTALL_SCRIPT" -c "10.0.1xx-ub" -q daily -i "$DOTNET_DIR"
+    "$DOTNET_INSTALL_SCRIPT" -c "11.0.1xx" -q daily -i "$DOTNET_DIR"
 fi
 
 # Download NuGet.config file from dotnet/android repo
@@ -68,7 +68,7 @@ if [ "$2" == "-userollback" ]; then
 fi
 
 # # Install the Android workload
-"$DOTNET_DIR/dotnet" workload install android maui
+"$DOTNET_DIR/dotnet" workload install android maui --from-rollback-file rollback.json
 
 # List installed workloads and print the Manifest version for android workload
 INSTALLED_WORKLOADS=$("$DOTNET_DIR/dotnet" workload --info)
