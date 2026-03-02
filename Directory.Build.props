@@ -23,6 +23,8 @@
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
     <RunAOTCompilation>False</RunAOTCompilation>
+    <PublishReadyToRun>False</PublishReadyToRun>
+    <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R'">
     <Configuration>Release</Configuration>
@@ -31,6 +33,7 @@
     <TargetFramework>net11.0-android</TargetFramework>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
+    <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
     <AndroidEnableMarshalMethods>False</AndroidEnableMarshalMethods>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R_COMP'">
