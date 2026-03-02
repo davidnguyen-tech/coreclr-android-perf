@@ -42,11 +42,8 @@ if [ ! -d "$APP_DIR" ]; then
     exit 1
 fi
 
-if [[ "$RUNTIME" == "mono" ]]; then
-    RUNTIME_SPECIFIC_ARGS="-p:UseMonoRuntime=true"
-elif [[ "$RUNTIME" == "coreclr" ]]; then
-    RUNTIME_SPECIFIC_ARGS="-p:UseMonoRuntime=false"
-fi
+# UseMonoRuntime is set by _BuildConfig in Directory.Build.props
+RUNTIME_SPECIFIC_ARGS=""
 
 if [[ -z "$4" || ! "$4" =~ ^[0-9]+$ ]]; then
     echo "Invalid fourth parameter. Please provide a positive integer indicating how many times the build will be repeated."

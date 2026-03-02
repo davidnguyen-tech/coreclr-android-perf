@@ -60,16 +60,8 @@ if [ ! -d "$APP_DIR" ]; then
     exit 1
 fi
 
-# Determine runtime-specific MSBuild args
-MSBUILD_ARGS=""
-if [[ "$RUNTIME" == "mono" ]]; then
-    MSBUILD_ARGS="-p:UseMonoRuntime=true"
-elif [[ "$RUNTIME" == "coreclr" ]]; then
-    MSBUILD_ARGS="-p:UseMonoRuntime=false"
-fi
-
-# Add build config
-MSBUILD_ARGS="$MSBUILD_ARGS -p:_BuildConfig=$BUILD_CONFIG"
+# Build config determines all MSBuild properties (including UseMonoRuntime)
+MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
 
 # Determine package name from the csproj
 PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$APP_DIR/$SAMPLE_APP.csproj" | sed 's/<ApplicationId>//')
