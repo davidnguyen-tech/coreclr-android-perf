@@ -29,7 +29,7 @@ print_usage() {
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
     echo "  --trace-perfetto              Capture a perfetto trace after measurements"
-    echo "  --iterations N                Number of startup iterations (default: 10)"
+    echo "  --startup-iterations N        Number of startup iterations (default: 10)"
     exit 1
 }
 
@@ -102,8 +102,12 @@ echo "Built APK: $APK_PATH"
 echo ""
 echo "=== Measuring startup ==="
 
+# Use local .dotnet for DOTNET_ROOT so the Startup parser tool can find its runtime
+export DOTNET_ROOT="$DOTNET_DIR"
+export PATH="$DOTNET_DIR:$PATH"
+
 # Set up PYTHONPATH for dotnet/performance scripts
-export PYTHONPATH="$PERF_DIR/scripts:$SCENARIOS_DIR:$PYTHONPATH"
+export PYTHONPATH="$SCENARIOS_DIR:$PYTHONPATH"
 
 # Add xharness to PATH if it's in the tools directory
 if [ -f "$TOOLS_DIR/xharness" ]; then

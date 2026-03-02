@@ -73,6 +73,13 @@ if [ $? -ne 0 ]; then
 fi
 echo "dotnet sdk: $SDK_VERSION" > "$VERSIONS_LOG"
 
+# Install .NET 8 runtime (needed by dotnet/performance's Startup parser tool)
+echo "Installing .NET 8 runtime (for dotnet/performance tooling)..."
+"$DOTNET_INSTALL_SCRIPT" --runtime dotnet --channel 8.0 --install-dir "$DOTNET_DIR"
+if [ $? -ne 0 ]; then
+    echo "Warning: Failed to install .NET 8 runtime. Startup result parsing may fail."
+fi
+
 # Download NuGet.config file from dotnet/android repo
 curl -L -o "$NUGET_CONFIG" https://raw.githubusercontent.com/dotnet/android/main/NuGet.config
 if [ $? -ne 0 ] || [ ! -f "$NUGET_CONFIG" ]; then
