@@ -88,7 +88,8 @@ if [ "$USE_ROLLBACK" = true ]; then
 fi
 
 # Install the Android and MAUI workloads
-"$LOCAL_DOTNET" workload install android maui
+# Use maui-android (not maui) to avoid pulling in iOS/Mac workloads that may be unavailable
+"$LOCAL_DOTNET" workload install android maui-android
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install workloads."
     exit 1
@@ -107,7 +108,7 @@ else
 fi
 
 # Install xharness CLI tool (required for startup measurements)
-"$LOCAL_DOTNET" tool install Microsoft.DotNet.XHarness.CLI --tool-path "$TOOLS_DIR" --version "*" --add-source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json
+"$LOCAL_DOTNET" tool install Microsoft.DotNet.XHarness.CLI --tool-path "$TOOLS_DIR" --version "11.0.0-prerelease.*" --add-source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json
 echo "xharness: $("$TOOLS_DIR/xharness" version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
 
 # Install diagnostic tools (required for .nettrace collection)
@@ -119,7 +120,11 @@ echo "dotnet-trace: installed" >> "$VERSIONS_LOG"
 
 # Initialize the dotnet/performance submodule
 echo "Initializing dotnet/performance submodule..."
-git submodule update --init --recursive external/performance
+if [ -f "$SCRIPT_DIR/external/performance/README.md" ]; then
+    echo "Submodule already populated, skipping."
+else
+    git -C "$SCRIPT_DIR" submodule update --init --recursive
+fi
 
 # Generate sample apps
 echo "Generating sample apps..."

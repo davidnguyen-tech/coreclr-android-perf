@@ -25,10 +25,39 @@ generate_app() {
     fi
 
     echo "Generating $app_name using template '$template'..."
-    ${LOCAL_DOTNET} new "$template" -n "$app_name" -o "$app_dir" $extra_args --force
+    local restore_flag=""
+    if [ "$template" = "maui" ]; then
+        restore_flag="--no-restore"
+    fi
+    ${LOCAL_DOTNET} new "$template" -n "$app_name" -o "$app_dir" $extra_args --force $restore_flag
     if [ $? -ne 0 ]; then
         echo "Error: Failed to generate $app_name"
         exit 1
+    fi
+
+    # For MAUI apps, restrict TargetFrameworks to Android-only (we don't need iOS/Mac)
+    local csproj="$app_dir/$app_name.csproj"
+    if [ "$template" = "maui" ] && [ -f "$csproj" ]; then
+        python3 - "$csproj" << 'TFMEOF'
+import sys, re
+csproj = sys.argv[1]
+content = open(csproj).read()
+# Replace all TargetFrameworks lines with a single Android-only line
+content = re.sub(
+    r'<TargetFrameworks[^>]*>.*?</TargetFrameworks>\s*\n\s*',
+    '',
+    content,
+    flags=re.DOTALL
+)
+# Insert single TargetFrameworks after the opening <PropertyGroup>
+content = content.replace(
+    '<PropertyGroup>\n',
+    '<PropertyGroup>\n\t\t<TargetFrameworks>net11.0-android</TargetFrameworks>\n',
+    1
+)
+open(csproj, 'w').write(content)
+TFMEOF
+        echo "Restricted $app_name to Android-only TFM"
     fi
 
     # Apply profiling patches

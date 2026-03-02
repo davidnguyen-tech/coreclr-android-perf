@@ -63,8 +63,8 @@ echo "Building $SAMPLE_APP with $RUNTIME runtime $REPEAT_COUNT times"
 
 for ((i=1; i<=REPEAT_COUNT; i++)); do
     echo "Build iteration $i of $REPEAT_COUNT"
-    rm -rf "$APP_DIR/bin"
-    rm -rf "$APP_DIR/obj"
+    rm -rf "${APP_DIR:?}/bin"
+    rm -rf "${APP_DIR:?}/obj"
 
     timestamp=$(date +"%Y%m%d%H%M%S")
     logfile="$APP_DIR/msbuild_$timestamp.binlog"
