@@ -98,7 +98,10 @@ if [ -z "$APK_PATH" ]; then
     exit 1
 fi
 
-echo "Built APK: $APK_PATH"
+# Record APK size
+APK_SIZE_BYTES=$(stat -f%z "$APK_PATH" 2>/dev/null || stat -c%s "$APK_PATH" 2>/dev/null)
+APK_SIZE_MB=$(echo "scale=2; $APK_SIZE_BYTES / 1048576" | bc)
+echo "Built APK: $APK_PATH (${APK_SIZE_MB} MB)"
 echo ""
 echo "=== Measuring startup ==="
 
@@ -144,6 +147,7 @@ fi
 
 echo ""
 echo "=== Measurement complete ==="
+echo "APK size: ${APK_SIZE_MB} MB ($APK_SIZE_BYTES bytes)"
 if [ -f "$RESULTS_DIR/${RESULT_NAME}.trace" ]; then
     echo "Results saved to: results/${RESULT_NAME}.trace"
 fi

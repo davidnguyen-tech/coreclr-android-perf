@@ -96,7 +96,7 @@ echo ""
 
 mkdir -p "$RESULTS_DIR"
 SUMMARY_FILE="$RESULTS_DIR/summary.csv"
-echo "app,runtime,config,avg_ms,min_ms,max_ms,iterations" > "$SUMMARY_FILE"
+echo "app,runtime,config,avg_ms,min_ms,max_ms,apk_size_mb,apk_size_bytes,iterations" > "$SUMMARY_FILE"
 
 for i in "${!CONFIGS[@]}"; do
     IFS='|' read -r app runtime config <<< "${CONFIGS[$i]}"
@@ -114,8 +114,11 @@ for i in "${!CONFIGS[@]}"; do
         AVG=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $2}' | sed 's/[^0-9.]//g')
         MIN=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $3}' | sed 's/[^0-9.]//g')
         MAX=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $4}' | sed 's/[^0-9.]//g')
-        echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms"
-        echo "$app,$runtime,$config,$AVG,$MIN,$MAX,$ITERATIONS" >> "$SUMMARY_FILE"
+        # Parse APK size from measure_startup.sh output
+        APK_SIZE_MB=$(echo "$OUTPUT" | grep -o '([0-9.]* MB)' | sed 's/[()]//g; s/ MB//')
+        APK_SIZE_BYTES=$(echo "$OUTPUT" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
+        echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  apk=${APK_SIZE_MB}MB"
+        echo "$app,$runtime,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
         PASSED=$((PASSED + 1))
     else
         echo "❌ FAILED"
@@ -143,10 +146,10 @@ echo ""
 
 # Print the summary table
 if [ -f "$SUMMARY_FILE" ]; then
-    echo "App                          | Runtime  | Config       | Avg (ms) | Min (ms) | Max (ms)"
-    echo "-----------------------------|----------|--------------|----------|----------|--------"
-    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app runtime config avg min max iters; do
-        printf "%-28s | %-8s | %-12s | %8s | %8s | %8s\n" "$app" "$runtime" "$config" "$avg" "$min" "$max"
+    echo "App                          | Runtime  | Config       | Avg (ms) | Min (ms) | Max (ms) | APK (MB)"
+    echo "-----------------------------|----------|--------------|----------|----------|----------|--------"
+    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app runtime config avg min max apk_mb apk_bytes iters; do
+        printf "%-28s | %-8s | %-12s | %8s | %8s | %8s | %8s\n" "$app" "$runtime" "$config" "$avg" "$min" "$max" "$apk_mb"
     done
 fi
 
