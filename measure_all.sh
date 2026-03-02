@@ -94,9 +94,17 @@ for i in "${!CONFIGS[@]}"; do
         # Parse APK size from measure_startup.sh output
         APK_SIZE_MB=$(echo "$OUTPUT" | grep "APK size:" | sed 's/.*APK size: \([0-9.]*\) MB.*/\1/')
         APK_SIZE_BYTES=$(echo "$OUTPUT" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
-        echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  apk=${APK_SIZE_MB}MB"
-        echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
-        PASSED=$((PASSED + 1))
+
+        if [ -z "$AVG" ] || [ -z "$MIN" ] || [ -z "$MAX" ]; then
+            echo "⚠️  PARSE FAILED — could not extract startup times from output"
+            echo "$OUTPUT" | tail -10
+            FAILURES+=("$app|$config")
+            FAILED=$((FAILED + 1))
+        else
+            echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  apk=${APK_SIZE_MB}MB"
+            echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
+            PASSED=$((PASSED + 1))
+        fi
     else
         echo "❌ FAILED"
         echo "$OUTPUT" | tail -5

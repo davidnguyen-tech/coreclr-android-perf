@@ -95,12 +95,12 @@ is_maui = sys.argv[2] == "true"
 patch = """
   <!-- Profiling support -->
   <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true'">
-    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)..\\..\\env.txt" />
+    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../env.txt" />
   </ItemGroup>
 
   <!-- PGO instrumentation for .nettrace collection -->
   <ItemGroup Condition="'$(CollectNetTrace)'=='true'">
-    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)..\\..\\env-nettrace.txt" />
+    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../env-nettrace.txt" />
   </ItemGroup>
 """
 
@@ -114,7 +114,7 @@ if is_maui:
     <_MauiUseDefaultReadyToRunPgoFiles>false</_MauiUseDefaultReadyToRunPgoFiles>
   </PropertyGroup>
   <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
-    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\\profiles\\*.mibc" />
+    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
   </ItemGroup>
 """
 else:
@@ -122,7 +122,7 @@ else:
     patch += """
   <!-- PGO profile support for R2R Composite builds -->
   <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
-    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\\profiles\\*.mibc" />
+    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
   </ItemGroup>
   <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
     <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>

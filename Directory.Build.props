@@ -18,6 +18,7 @@
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
     <UseMonoRuntime>True</UseMonoRuntime>
+    <RunAOTCompilation>True</RunAOTCompilation>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'MONO_JIT'">
     <Configuration>Release</Configuration>

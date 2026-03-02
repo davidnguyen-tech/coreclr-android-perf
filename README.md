@@ -124,10 +124,10 @@ Runs `measure_startup.sh` for all (app, config) combinations and produces a summ
 ### Collecting .nettrace Startup Traces
 
 ```bash
-./collect_nettrace.sh <app> <runtime> <build-config> [options]
+./collect_nettrace.sh <app> <build-config> [options]
 ```
 
-Collects a `.nettrace` startup trace for a given app/runtime/config combination. The trace captures detailed runtime events (JIT compilation, assembly loading, GC, exceptions, thread pool, interop) that can be used to analyze startup behavior.
+Collects a `.nettrace` startup trace for a given (app, build-config) combination. The trace captures detailed runtime events (JIT compilation, assembly loading, GC, exceptions, thread pool, interop) that can be used to analyze startup behavior.
 
 **Flow:**
 
@@ -141,7 +141,7 @@ Collects a `.nettrace` startup trace for a given app/runtime/config combination.
 - `--force` — Re-collect even if a trace already exists
 - `--pgo-instrumentation` — Include PGO instrumentation env vars for higher-quality traces
 
-**Output:** `traces/<app>_<runtime>_<config>/android-startup.nettrace`
+**Output:** `traces/<app>_<config>/android-startup.nettrace`
 
 The trace directory also contains the build binlog and a `logcat.txt` dump for diagnostics.
 
@@ -158,13 +158,13 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 
 ```bash
 # Collect a CoreCLR R2R trace with default 60s duration
-./collect_nettrace.sh dotnet-new-android coreclr R2R
+./collect_nettrace.sh dotnet-new-android R2R
 
 # Collect a Mono JIT trace with 30s duration
-./collect_nettrace.sh dotnet-new-maui mono MONO_JIT --duration 30
+./collect_nettrace.sh dotnet-new-maui MONO_JIT --duration 30
 
 # Re-collect an existing trace with PGO instrumentation
-./collect_nettrace.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO --force --pgo-instrumentation
+./collect_nettrace.sh dotnet-new-maui-samplecontent R2R_COMP_PGO --force --pgo-instrumentation
 ```
 
 ### Building / Running Sample Apps Manually
