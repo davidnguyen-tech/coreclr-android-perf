@@ -47,6 +47,13 @@ if [[ "$SAMPLE_APP" != "dotnet-new-android" && "$SAMPLE_APP" != "dotnet-new-maui
     print_usage
 fi
 
+# Validate build config
+VALID_CONFIGS="MONO_JIT CORECLR_JIT AOT PAOT R2R R2R_COMP R2R_COMP_PGO"
+if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
+    echo "Invalid build config '$BUILD_CONFIG'. Allowed values are: $VALID_CONFIGS"
+    exit 1
+fi
+
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
 if [ ! -d "$APP_DIR" ]; then
     echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."

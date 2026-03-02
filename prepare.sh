@@ -60,6 +60,9 @@ rm -rf "$LOCAL_PACKAGES"
 rm -rf "$BUILD_DIR"
 rm -rf "$APPS_DIR"
 rm -f "$VERSIONS_LOG"
+# Clean tool binaries (keep dotnet-install.sh)
+find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "dotnet-install.sh" -exec rm -f {} \; 2>/dev/null
+find "$TOOLS_DIR" -maxdepth 1 -type d ! -path "$TOOLS_DIR" -exec rm -rf {} \; 2>/dev/null
 
 mkdir -p "$LOCAL_PACKAGES"
 mkdir -p "$BUILD_DIR"
@@ -92,6 +95,10 @@ fi
 
 if [ "$USE_ROLLBACK" = true ]; then
     "$LOCAL_DOTNET" workload update --from-rollback-file rollback.json
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to apply workload rollback."
+        exit 1
+    fi
 fi
 
 # Install the Android and MAUI workloads
@@ -116,14 +123,26 @@ fi
 
 # Install xharness CLI tool (required for startup measurements)
 "$LOCAL_DOTNET" tool install Microsoft.DotNet.XHarness.CLI --tool-path "$TOOLS_DIR" --version "11.0.0-prerelease.*" --add-source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install xharness."
+    exit 1
+fi
 echo "xharness: $("$TOOLS_DIR/xharness" version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
 
 # Install diagnostic tools (required for .nettrace collection)
 DIAG_FEED="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json"
 "$LOCAL_DOTNET" tool install dotnet-dsrouter --tool-path "$TOOLS_DIR" --version "*" --add-source "$DIAG_FEED"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install dotnet-dsrouter."
+    exit 1
+fi
 "$LOCAL_DOTNET" tool install dotnet-trace --tool-path "$TOOLS_DIR" --version "*" --add-source "$DIAG_FEED"
-echo "dotnet-dsrouter: installed" >> "$VERSIONS_LOG"
-echo "dotnet-trace: installed" >> "$VERSIONS_LOG"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install dotnet-trace."
+    exit 1
+fi
+echo "dotnet-dsrouter: $("$TOOLS_DIR/dotnet-dsrouter" --version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
+echo "dotnet-trace: $("$TOOLS_DIR/dotnet-trace" --version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
 
 # Initialize the dotnet/performance submodule
 echo "Initializing dotnet/performance submodule..."

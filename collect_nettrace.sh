@@ -71,6 +71,10 @@ PGO_INSTRUMENTATION=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --duration)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --duration requires a numeric value"
+                exit 1
+            fi
             DURATION=$2
             shift 2
             ;;
@@ -93,6 +97,13 @@ done
 if [[ "$SAMPLE_APP" != "dotnet-new-android" && "$SAMPLE_APP" != "dotnet-new-maui" && "$SAMPLE_APP" != "dotnet-new-maui-samplecontent" ]]; then
     echo "Invalid app: $SAMPLE_APP"
     print_usage
+fi
+
+# Validate build config
+VALID_CONFIGS="MONO_JIT CORECLR_JIT AOT PAOT R2R R2R_COMP R2R_COMP_PGO"
+if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
+    echo "Invalid build config '$BUILD_CONFIG'. Allowed values are: $VALID_CONFIGS"
+    exit 1
 fi
 
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
@@ -226,7 +237,7 @@ PROVIDERS="Microsoft-Windows-DotNETRuntime:0x1F000080018:5,Microsoft-Windows-Dot
 "$DOTNET_TRACE" collect \
     --output "$TRACE_FILE" \
     --diagnostic-port "$IPC_NAME,connect" \
-    --duration "00:$(printf '%02d' $((DURATION / 60))):$(printf '%02d' $((DURATION % 60)))" \
+    --duration "$(printf '%02d:%02d:%02d' $((DURATION / 3600)) $(((DURATION % 3600) / 60)) $((DURATION % 60)))" \
     --providers "$PROVIDERS"
 
 TRACE_RESULT=$?
