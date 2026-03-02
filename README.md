@@ -34,10 +34,14 @@ Repository for measuring startup performance, build times, and APK sizes of .NET
 3. Run startup measurements:
 
     ```bash
+    # Single configuration
     ./measure_startup.sh dotnet-new-android coreclr R2R
+
+    # All configurations
+    ./measure_all.sh --startup-iterations 10
     ```
 
-4. Inspect results in the console output.
+4. Inspect results in `results/summary.csv` or the console output.
 
 > **Note:** Pass `-f` to `prepare.sh` to force a full reset of the environment.
 
@@ -71,10 +75,13 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 **Build configs:** `JIT`, `AOT`, `PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
 
 **Options:**
+- `--startup-iterations N` — Number of startup iterations (default: 10)
 - `--disable-animations` — Disable device animations during measurement
 - `--use-fully-drawn-time` — Use fully drawn time instead of displayed time
 - `--fully-drawn-extra-delay N` — Extra delay for fully drawn time (seconds)
 - `--trace-perfetto` — Capture a perfetto trace after measurements
+
+Results are saved to `results/<app>_<runtime>_<config>.trace`.
 
 **Examples:**
 
@@ -87,6 +94,37 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 
 # CoreCLR R2R Composite with PGO
 ./measure_startup.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO
+```
+
+### Measuring All Configurations
+
+```bash
+./measure_all.sh [options]
+```
+
+Runs `measure_startup.sh` for all (app, runtime, config) combinations and produces a summary table and CSV.
+
+**Options:**
+- `--app <name>` — Measure only this app (can be repeated)
+- `--runtime <mono|coreclr>` — Measure only this runtime (can be repeated)
+- `--startup-iterations N` — Iterations per config (default: 10)
+
+**Output:** `results/summary.csv` with columns: app, runtime, config, avg_ms, min_ms, max_ms, iterations.
+
+**Examples:**
+
+```bash
+# All 21 configurations with 10 iterations each
+./measure_all.sh
+
+# Quick sweep with 3 iterations
+./measure_all.sh --startup-iterations 3
+
+# Only Android app, all configs
+./measure_all.sh --app dotnet-new-android
+
+# Only CoreCLR configs for MAUI app
+./measure_all.sh --app dotnet-new-maui --runtime coreclr
 ```
 
 ### Collecting .nettrace Startup Traces
@@ -192,6 +230,7 @@ Configurations are defined in [`Directory.Build.props`](./Directory.Build.props)
 ├── generate-apps.sh          # Dynamic sample app generation
 ├── build.sh                  # Build/run sample apps
 ├── measure_startup.sh        # Startup measurement using dotnet/performance
+├── measure_all.sh            # Run all configurations and produce summary
 ├── collect_nettrace.sh       # .nettrace startup trace collection
 ├── clean.sh                  # Clean build artifacts
 ├── print_apk_sizes.sh        # APK size reporting
@@ -204,5 +243,6 @@ Configurations are defined in [`Directory.Build.props`](./Directory.Build.props)
 ├── .dotnet/                  # Local .NET SDK install (gitignored)
 ├── build/                    # Build artifacts (gitignored)
 ├── traces/                   # Collected .nettrace traces (gitignored)
+├── results/                  # Measurement results (gitignored)
 └── tools/                    # Tools (dotnet-install.sh, xharness) (gitignored)
 ```
