@@ -19,6 +19,18 @@ generate_app() {
 
     local app_dir="$APPS_DIR/$app_name"
 
+    # Guard: app name must not look like a framework assembly (e.g. Microsoft.*, System.*, Mono.*)
+    # to avoid collisions with --include-reference filters used in R2R/PGO compilation.
+    local assembly_name
+    assembly_name=$(echo "$app_name" | tr '-' '_')
+    for prefix in Microsoft. System. Mono. Xamarin.; do
+        if [[ "$assembly_name" == ${prefix}* ]]; then
+            echo "Error: App name '$app_name' produces assembly name '$assembly_name' which starts with '$prefix'."
+            echo "This would collide with framework assembly filters used in R2R compilation."
+            exit 1
+        fi
+    done
+
     if [ -d "$app_dir" ]; then
         echo "App $app_name already exists at $app_dir. Skipping generation."
         return 0

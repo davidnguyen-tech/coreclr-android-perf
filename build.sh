@@ -9,7 +9,7 @@ fi
 
 if [[ -z "$1" || -z "$2" ]]; then
     echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> <build|run> <ntimes> [additional_args]"
-    echo "  build-config: MONO_JIT, CORECLR_JIT, AOT, PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
+    echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     exit 1
 fi
 
@@ -18,7 +18,7 @@ if [[ "$1" != "dotnet-new-android" && "$1" != "dotnet-new-maui" && "$1" != "dotn
     exit 1
 fi
 
-VALID_CONFIGS="MONO_JIT CORECLR_JIT AOT PAOT R2R R2R_COMP R2R_COMP_PGO"
+VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
 if [[ ! " $VALID_CONFIGS " =~ " $2 " ]]; then
     echo "Invalid build config '$2'. Allowed values are: $VALID_CONFIGS"
     exit 1

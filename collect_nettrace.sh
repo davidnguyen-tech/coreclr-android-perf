@@ -42,7 +42,7 @@ print_usage() {
     echo "Collects a .nettrace startup trace for the given (app, build-config) tuple."
     echo ""
     echo "Apps:     dotnet-new-android, dotnet-new-maui, dotnet-new-maui-samplecontent"
-    echo "Configs:  MONO_JIT, CORECLR_JIT, AOT, PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
+    echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
     echo "  --duration N             Trace duration in seconds (default: 60)"
@@ -104,7 +104,7 @@ if [[ "$SAMPLE_APP" != "dotnet-new-android" && "$SAMPLE_APP" != "dotnet-new-maui
 fi
 
 # Validate build config
-VALID_CONFIGS="MONO_JIT CORECLR_JIT AOT PAOT R2R R2R_COMP R2R_COMP_PGO"
+VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
 if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
     echo "Invalid build config '$BUILD_CONFIG'. Allowed values are: $VALID_CONFIGS"
     exit 1

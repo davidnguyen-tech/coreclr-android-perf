@@ -2,7 +2,7 @@
 
 source "$(dirname "$0")/init.sh"
 
-ALL_CONFIGS=("MONO_JIT" "AOT" "PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
+ALL_CONFIGS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
 APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
 
 ITERATIONS=10

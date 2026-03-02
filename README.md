@@ -70,7 +70,7 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 
 **Apps:** `dotnet-new-android`, `dotnet-new-maui`, `dotnet-new-maui-samplecontent`
 
-**Build configs:** `MONO_JIT`, `CORECLR_JIT`, `AOT`, `PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
+**Build configs:** `MONO_JIT`, `CORECLR_JIT`, `MONO_AOT`, `MONO_PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
 
 **Options:**
 - `--startup-iterations N` — Number of startup iterations (default: 10)
@@ -198,8 +198,8 @@ Scans the `./build/` directory for signed APKs and prints their sizes. Pass `-un
 | Config | Runtime | Description |
 |--------|---------|-------------|
 | MONO_JIT | Mono | Mono with JIT enabled |
-| AOT | Mono | Mono with full AOT |
-| PAOT | Mono | Mono with profile-guided AOT |
+| MONO_AOT | Mono | Mono with full AOT |
+| MONO_PAOT | Mono | Mono with profile-guided AOT |
 | CORECLR_JIT | CoreCLR | CoreCLR with JIT only |
 | R2R | CoreCLR | CoreCLR with ReadyToRun |
 | R2R_COMP | CoreCLR | CoreCLR with Composite ReadyToRun |
