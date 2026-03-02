@@ -29,10 +29,18 @@ print_usage() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --app)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --app requires a value"
+                exit 1
+            fi
             SELECTED_APPS+=("$2")
             shift 2
             ;;
         --startup-iterations)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --startup-iterations requires a numeric value"
+                exit 1
+            fi
             ITERATIONS="$2"
             shift 2
             ;;
@@ -92,8 +100,11 @@ for i in "${!CONFIGS[@]}"; do
         MIN=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $3}' | sed 's/[^0-9.]//g')
         MAX=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $4}' | sed 's/[^0-9.]//g')
         # Parse APK size from measure_startup.sh output
-        APK_SIZE_MB=$(echo "$OUTPUT" | grep "APK size:" | sed 's/.*APK size: \([0-9.]*\) MB.*/\1/')
+        APK_SIZE_MB=$(echo "$OUTPUT" | grep "APK size:" | sed -n 's/.*APK size: \([0-9.]*\) MB.*/\1/p')
         APK_SIZE_BYTES=$(echo "$OUTPUT" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
+        if [ -z "$APK_SIZE_MB" ]; then
+            APK_SIZE_MB="unknown"
+        fi
 
         if [ -z "$AVG" ] || [ -z "$MIN" ] || [ -z "$MAX" ]; then
             echo "⚠️  PARSE FAILED — could not extract startup times from output"

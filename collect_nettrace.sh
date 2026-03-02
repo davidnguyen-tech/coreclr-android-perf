@@ -75,6 +75,10 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --duration requires a numeric value"
                 exit 1
             fi
+            if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                echo "Error: --duration requires a positive integer, got '$2'"
+                exit 1
+            fi
             DURATION=$2
             shift 2
             ;;
