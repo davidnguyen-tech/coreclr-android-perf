@@ -145,7 +145,7 @@ fi
 # ---------------------------------------------------------------------------
 # IPC / dsrouter names
 # ---------------------------------------------------------------------------
-IPC_NAME="dotnet-dsrouter-android"
+IPC_NAME="$TRACE_DIR/dotnet-dsrouter-android"
 
 # Cleanup function
 DSROUTER_PID=""
@@ -165,7 +165,7 @@ cleanup() {
     adb shell pm uninstall "$PACKAGE_NAME" 2>/dev/null || true
 
     # Remove IPC socket file if it exists
-    rm -f "/tmp/$IPC_NAME" 2>/dev/null
+    rm -f "$IPC_NAME" 2>/dev/null
 }
 
 trap cleanup EXIT

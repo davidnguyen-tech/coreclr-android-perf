@@ -95,7 +95,12 @@ fi
 
 # Record APK size
 APK_SIZE_BYTES=$(stat -f%z "$APK_PATH" 2>/dev/null || stat -c%s "$APK_PATH" 2>/dev/null)
-APK_SIZE_MB=$(python3 -c "print(f'{$APK_SIZE_BYTES / 1048576:.2f}')")
+if [ -z "$APK_SIZE_BYTES" ]; then
+    echo "Warning: Could not determine APK size for $APK_PATH"
+    APK_SIZE_MB="unknown"
+else
+    APK_SIZE_MB=$(python3 -c "print(f'{$APK_SIZE_BYTES / 1048576:.2f}')")
+fi
 echo "Built APK: $APK_PATH (${APK_SIZE_MB} MB)"
 echo ""
 echo "=== Measuring startup ==="
