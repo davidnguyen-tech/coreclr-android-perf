@@ -89,6 +89,52 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 ./measure_startup.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO
 ```
 
+### Collecting .nettrace Startup Traces
+
+```bash
+./collect_nettrace.sh <app> <runtime> <build-config> [options]
+```
+
+Collects a `.nettrace` startup trace for a given app/runtime/config combination. The trace captures detailed runtime events (JIT compilation, assembly loading, GC, exceptions, thread pool, interop) that can be used to analyze startup behavior.
+
+**Flow:**
+
+1. Starts `dotnet-dsrouter` to bridge diagnostics from the Android device to the host
+2. Builds and deploys the app with diagnostics enabled (`AndroidEnableProfiler=true`)
+3. Runs `dotnet-trace collect` against the diagnostic port for the specified duration
+4. Cleans up (stops dsrouter, uninstalls app from device)
+
+**Options:**
+- `--duration N` — Trace duration in seconds (default: 60)
+- `--force` — Re-collect even if a trace already exists
+- `--pgo-instrumentation` — Include PGO instrumentation env vars for higher-quality traces
+
+**Output:** `traces/<app>_<runtime>_<config>/android-startup.nettrace`
+
+The trace directory also contains the build binlog and a `logcat.txt` dump for diagnostics.
+
+**Event providers captured:**
+- `Microsoft-Windows-DotNETRuntime` — JIT, Loader, GC, Exception, ThreadPool, Interop events
+- `Microsoft-Windows-DotNETRuntimePrivate` — Additional runtime internals
+
+**Analyzing traces:**
+- **PerfView** (Windows) — Open the `.nettrace` file directly for rich event analysis
+- **`dotnet-trace convert`** — Convert to speedscope format (`dotnet-trace convert android-startup.nettrace --format Speedscope`) and open in [speedscope.app](https://www.speedscope.app/)
+- **`dotnet-trace report`** — Generate summary reports from the command line
+
+**Examples:**
+
+```bash
+# Collect a CoreCLR R2R trace with default 60s duration
+./collect_nettrace.sh dotnet-new-android coreclr R2R
+
+# Collect a Mono JIT trace with 30s duration
+./collect_nettrace.sh dotnet-new-maui mono JIT --duration 30
+
+# Re-collect an existing trace with PGO instrumentation
+./collect_nettrace.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO --force --pgo-instrumentation
+```
+
 ### Building / Running Sample Apps Manually
 
 ```bash
@@ -146,14 +192,17 @@ Configurations are defined in [`Directory.Build.props`](./Directory.Build.props)
 ├── generate-apps.sh          # Dynamic sample app generation
 ├── build.sh                  # Build/run sample apps
 ├── measure_startup.sh        # Startup measurement using dotnet/performance
+├── collect_nettrace.sh       # .nettrace startup trace collection
 ├── clean.sh                  # Clean build artifacts
 ├── print_apk_sizes.sh        # APK size reporting
 ├── dotnet-local.sh           # Proxy to local .NET SDK
 ├── env.txt                   # DiagnosticPorts config for profiling
+├── env-nettrace.txt          # PGO instrumentation env vars for trace collection
 ├── profiles/                 # Shared PGO .mibc profiles
 ├── external/performance/     # dotnet/performance submodule
 ├── apps/                     # Generated sample apps (gitignored)
 ├── .dotnet/                  # Local .NET SDK install (gitignored)
 ├── build/                    # Build artifacts (gitignored)
+├── traces/                   # Collected .nettrace traces (gitignored)
 └── tools/                    # Tools (dotnet-install.sh, xharness) (gitignored)
 ```
