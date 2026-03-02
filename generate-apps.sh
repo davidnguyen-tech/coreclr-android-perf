@@ -81,10 +81,17 @@ patch_app() {
     fi
 
     # Inject profiling and PGO support before the closing </Project> tag
-    python3 - "$csproj" << 'PYEOF'
+    local is_maui="false"
+    if grep -q "Maui" "$csproj" 2>/dev/null; then
+        is_maui="true"
+    fi
+
+    python3 - "$csproj" "$is_maui" << 'PYEOF'
 import sys
 
 csproj = sys.argv[1]
+is_maui = sys.argv[2] == "true"
+
 patch = """
   <!-- Profiling support -->
   <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true'">
@@ -95,7 +102,24 @@ patch = """
   <ItemGroup Condition="'$(CollectNetTrace)'=='true'">
     <AndroidEnvironment Include="$(MSBuildThisFileDirectory)..\\..\\env-nettrace.txt" />
   </ItemGroup>
+"""
 
+if is_maui:
+    # MAUI Controls already sets --partial and includes default MIBC profiles
+    # via _MauiPublishReadyToRunPartial and _MauiUseDefaultReadyToRunPgoFiles.
+    # Override the default profiles with our own.
+    patch += """
+  <!-- Use our own PGO profiles instead of MAUI defaults for R2R Composite PGO builds -->
+  <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
+    <_MauiUseDefaultReadyToRunPgoFiles>false</_MauiUseDefaultReadyToRunPgoFiles>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
+    <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\\profiles\\*.mibc" />
+  </ItemGroup>
+"""
+else:
+    # Non-MAUI apps: set --partial and MIBC profiles ourselves
+    patch += """
   <!-- PGO profile support for R2R Composite builds -->
   <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
     <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\\profiles\\*.mibc" />
@@ -104,9 +128,8 @@ patch = """
     <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>
   </PropertyGroup>
 """
+
 content = open(csproj).read()
-if patch.strip() in content:
-    sys.exit(0)
 content = content.replace('</Project>', patch + '</Project>')
 open(csproj, 'w').write(content)
 PYEOF
