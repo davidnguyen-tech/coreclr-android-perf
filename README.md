@@ -72,7 +72,7 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 
 **Runtimes:** `mono`, `coreclr`
 
-**Build configs:** `JIT`, `AOT`, `PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
+**Build configs:** `MONO_JIT`, `CORECLR_JIT`, `AOT`, `PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
 
 **Options:**
 - `--startup-iterations N` — Number of startup iterations (default: 10)
@@ -90,7 +90,7 @@ Results are saved to `results/<app>_<runtime>_<config>.trace`.
 ./measure_startup.sh dotnet-new-android coreclr R2R
 
 # Mono JIT startup of MAUI app with animations disabled
-./measure_startup.sh dotnet-new-maui mono JIT --disable-animations
+./measure_startup.sh dotnet-new-maui mono MONO_JIT --disable-animations
 
 # CoreCLR R2R Composite with PGO
 ./measure_startup.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO
@@ -167,7 +167,7 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 ./collect_nettrace.sh dotnet-new-android coreclr R2R
 
 # Collect a Mono JIT trace with 30s duration
-./collect_nettrace.sh dotnet-new-maui mono JIT --duration 30
+./collect_nettrace.sh dotnet-new-maui mono MONO_JIT --duration 30
 
 # Re-collect an existing trace with PGO instrumentation
 ./collect_nettrace.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO --force --pgo-instrumentation
@@ -183,7 +183,7 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 
 ```bash
 # Build dotnet new android with Mono JIT
-./build.sh dotnet-new-android mono build 1 -p:_BuildConfig=JIT
+./build.sh dotnet-new-android mono build 1 -p:_BuildConfig=MONO_JIT
 
 # Run dotnet new maui with CoreCLR R2R + marshal methods
 ./build.sh dotnet-new-maui coreclr run 1 "-p:_BuildConfig=R2R -p:AndroidEnableMarshalMethods=true"
@@ -203,10 +203,10 @@ Scans the `./build/` directory for signed APKs and prints their sizes. Pass `-un
 
 | Config | Runtime | Description |
 |--------|---------|-------------|
-| JIT | Mono | Mono with JIT enabled |
+| MONO_JIT | Mono | Mono with JIT enabled |
 | AOT | Mono | Mono with full AOT |
 | PAOT | Mono | Mono with profile-guided AOT |
-| JIT | CoreCLR | CoreCLR with JIT only |
+| CORECLR_JIT | CoreCLR | CoreCLR with JIT only |
 | R2R | CoreCLR | CoreCLR with ReadyToRun |
 | R2R_COMP | CoreCLR | CoreCLR with Composite ReadyToRun |
 | R2R_COMP_PGO | CoreCLR | CoreCLR with Composite R2R + PGO profiles |

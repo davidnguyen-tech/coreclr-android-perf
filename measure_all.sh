@@ -2,23 +2,20 @@
 
 source "$(dirname "$0")/init.sh"
 
-MONO_CONFIGS=("MONO_JIT" "AOT" "PAOT")
-CORECLR_CONFIGS=("CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
+ALL_CONFIGS=("MONO_JIT" "AOT" "PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
 APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
 
 ITERATIONS=10
 EXTRA_ARGS=()
 SELECTED_APPS=()
-SELECTED_RUNTIMES=()
 
 print_usage() {
     echo "Usage: $0 [options]"
     echo ""
-    echo "Runs startup measurements for all (app, runtime, config) combinations."
+    echo "Runs startup measurements for all (app, config) combinations."
     echo ""
     echo "Options:"
     echo "  --app <name>               Measure only this app (can be repeated)"
-    echo "  --runtime <mono|coreclr>   Measure only this runtime (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
     echo "  --help                     Show this help message"
     echo ""
@@ -26,8 +23,6 @@ print_usage() {
     echo "  $0                                          # All apps, all configs, 10 iterations"
     echo "  $0 --startup-iterations 3                   # All apps, all configs, 3 iterations"
     echo "  $0 --app dotnet-new-android                 # Only Android app, all configs"
-    echo "  $0 --runtime coreclr                        # All apps, CoreCLR configs only"
-    echo "  $0 --app dotnet-new-maui --runtime mono     # MAUI app, Mono configs only"
     exit 0
 }
 
@@ -35,10 +30,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --app)
             SELECTED_APPS+=("$2")
-            shift 2
-            ;;
-        --runtime)
-            SELECTED_RUNTIMES+=("$2")
             shift 2
             ;;
         --startup-iterations)
@@ -55,30 +46,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Default to all apps/runtimes if none selected
+# Default to all apps if none selected
 if [ ${#SELECTED_APPS[@]} -eq 0 ]; then
     SELECTED_APPS=("${APPS[@]}")
 fi
-if [ ${#SELECTED_RUNTIMES[@]} -eq 0 ]; then
-    SELECTED_RUNTIMES=("mono" "coreclr")
-fi
 
-# Build the list of (app, runtime, config) tuples
+# Build the list of (app, config) pairs
 CONFIGS=()
 for app in "${SELECTED_APPS[@]}"; do
-    for runtime in "${SELECTED_RUNTIMES[@]}"; do
-        if [[ "$runtime" == "mono" ]]; then
-            for config in "${MONO_CONFIGS[@]}"; do
-                CONFIGS+=("$app|$runtime|$config")
-            done
-        elif [[ "$runtime" == "coreclr" ]]; then
-            for config in "${CORECLR_CONFIGS[@]}"; do
-                CONFIGS+=("$app|$runtime|$config")
-            done
-        else
-            echo "Error: Unknown runtime '$runtime'. Use 'mono' or 'coreclr'."
-            exit 1
-        fi
+    for config in "${ALL_CONFIGS[@]}"; do
+        CONFIGS+=("$app|$config")
     done
 done
 
@@ -96,16 +73,16 @@ echo ""
 
 mkdir -p "$RESULTS_DIR"
 SUMMARY_FILE="$RESULTS_DIR/summary.csv"
-echo "app,runtime,config,avg_ms,min_ms,max_ms,apk_size_mb,apk_size_bytes,iterations" > "$SUMMARY_FILE"
+echo "app,config,avg_ms,min_ms,max_ms,apk_size_mb,apk_size_bytes,iterations" > "$SUMMARY_FILE"
 
 for i in "${!CONFIGS[@]}"; do
-    IFS='|' read -r app runtime config <<< "${CONFIGS[$i]}"
+    IFS='|' read -r app config <<< "${CONFIGS[$i]}"
     NUM=$((i + 1))
 
-    echo "[$NUM/$TOTAL] $app | $runtime | $config"
+    echo "[$NUM/$TOTAL] $app | $config"
     echo "----------------------------------------------"
 
-    OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$runtime" "$config" \
+    OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
         --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
     EXIT_CODE=$?
 
@@ -118,12 +95,12 @@ for i in "${!CONFIGS[@]}"; do
         APK_SIZE_MB=$(echo "$OUTPUT" | grep -o '([0-9.]* MB)' | sed 's/[()]//g; s/ MB//')
         APK_SIZE_BYTES=$(echo "$OUTPUT" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
         echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  apk=${APK_SIZE_MB}MB"
-        echo "$app,$runtime,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
+        echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
         PASSED=$((PASSED + 1))
     else
         echo "❌ FAILED"
         echo "$OUTPUT" | tail -5
-        FAILURES+=("$app|$runtime|$config")
+        FAILURES+=("$app|$config")
         FAILED=$((FAILED + 1))
     fi
     echo ""
@@ -136,8 +113,8 @@ echo " Passed: $PASSED / $TOTAL"
 if [ $FAILED -gt 0 ]; then
     echo " Failed: $FAILED"
     for f in "${FAILURES[@]}"; do
-        IFS='|' read -r app runtime config <<< "$f"
-        echo "   - $app | $runtime | $config"
+        IFS='|' read -r app config <<< "$f"
+        echo "   - $app | $config"
     done
 fi
 echo ""
@@ -146,10 +123,10 @@ echo ""
 
 # Print the summary table
 if [ -f "$SUMMARY_FILE" ]; then
-    echo "App                          | Runtime  | Config       | Avg (ms) | Min (ms) | Max (ms) | APK (MB)"
-    echo "-----------------------------|----------|--------------|----------|----------|----------|--------"
-    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app runtime config avg min max apk_mb apk_bytes iters; do
-        printf "%-28s | %-8s | %-12s | %8s | %8s | %8s | %8s\n" "$app" "$runtime" "$config" "$avg" "$min" "$max" "$apk_mb"
+    echo "App                          | Config         | Avg (ms) | Min (ms) | Max (ms) | APK (MB)"
+    echo "-----------------------------|----------------|----------|----------|----------|--------"
+    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app config avg min max apk_mb apk_bytes iters; do
+        printf "%-28s | %-14s | %8s | %8s | %8s | %8s\n" "$app" "$config" "$avg" "$min" "$max" "$apk_mb"
     done
 fi
 

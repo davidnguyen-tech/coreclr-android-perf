@@ -20,9 +20,9 @@ fi
 
 # Usage
 print_usage() {
-    echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <mono|coreclr> <build-config> [options]"
+    echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> [options]"
     echo ""
-    echo "Build configs: JIT, AOT, PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
+    echo "Build configs: MONO_JIT, CORECLR_JIT, AOT, PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
     echo "  --disable-animations          Disable device animations during measurement"
@@ -33,24 +33,17 @@ print_usage() {
     exit 1
 }
 
-if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
+if [[ -z "$1" || -z "$2" ]]; then
     print_usage
 fi
 
 SAMPLE_APP=$1
-RUNTIME=$2
-BUILD_CONFIG=$3
-shift 3
+BUILD_CONFIG=$2
+shift 2
 
 # Validate app name
 if [[ "$SAMPLE_APP" != "dotnet-new-android" && "$SAMPLE_APP" != "dotnet-new-maui" && "$SAMPLE_APP" != "dotnet-new-maui-samplecontent" ]]; then
     echo "Invalid app: $SAMPLE_APP"
-    print_usage
-fi
-
-# Validate runtime
-if [[ "$RUNTIME" != "mono" && "$RUNTIME" != "coreclr" ]]; then
-    echo "Invalid runtime: $RUNTIME"
     print_usage
 fi
 
@@ -70,14 +63,14 @@ if [ -z "$PACKAGE_NAME" ]; then
     PACKAGE_NAME="com.companyname.$(echo "$SAMPLE_APP" | tr '-' '_')"
 fi
 
-echo "=== Building $SAMPLE_APP ($RUNTIME, $BUILD_CONFIG) ==="
+echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) ==="
 
 # Clean previous build artifacts to avoid stale state between configs
 rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
 
 # Build the APK
 ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 \
-    -bl:"$BUILD_DIR/${SAMPLE_APP}_${RUNTIME}_${BUILD_CONFIG}.binlog" \
+    -bl:"$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog" \
     "$APP_DIR/$SAMPLE_APP.csproj" \
     $MSBUILD_ARGS
 
@@ -116,7 +109,7 @@ fi
 cd "$SCENARIOS_DIR/genericandroidstartup" || { echo "Error: dotnet/performance scenario directory not found. Run ./prepare.sh first."; exit 1; }
 
 # Create results directory
-RESULT_NAME="${SAMPLE_APP}_${RUNTIME}_${BUILD_CONFIG}"
+RESULT_NAME="${SAMPLE_APP}_${BUILD_CONFIG}"
 mkdir -p "$RESULTS_DIR"
 
 python3 test.py devicestartup \
