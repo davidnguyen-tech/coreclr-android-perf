@@ -48,6 +48,7 @@
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
+    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
     <AndroidEnableMarshalMethods>False</AndroidEnableMarshalMethods>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R_COMP'">
@@ -59,6 +60,7 @@
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
+    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
     <AndroidEnableMarshalMethods>False</AndroidEnableMarshalMethods>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R_COMP_PGO'">
