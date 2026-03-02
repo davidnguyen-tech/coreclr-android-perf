@@ -59,6 +59,7 @@ versions.log
 tools/
 packages/
 build/
+apps/
 .DS_Store
 perfdata/
 [Nn]u[Gg]et.config
