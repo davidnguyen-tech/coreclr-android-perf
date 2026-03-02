@@ -32,6 +32,12 @@ if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$FORCE" = false ]; then
     exit 0
 fi
 
+# Validate prerequisites
+if ! command -v python3 &> /dev/null; then
+    echo "Error: python3 is required but not found in PATH."
+    exit 1
+fi
+
 # Read SDK version from global.json
 if [ ! -f "$GLOBAL_JSON" ]; then
     echo "Error: global.json not found at $GLOBAL_JSON"
@@ -94,7 +100,7 @@ fi
 "$LOCAL_DOTNET" workload config --update-mode manifests
 
 if [ "$USE_ROLLBACK" = true ]; then
-    "$LOCAL_DOTNET" workload update --from-rollback-file rollback.json
+    "$LOCAL_DOTNET" workload update --from-rollback-file "$SCRIPT_DIR/rollback.json"
     if [ $? -ne 0 ]; then
         echo "Error: Failed to apply workload rollback."
         exit 1
@@ -150,11 +156,19 @@ if [ -f "$SCRIPT_DIR/external/performance/README.md" ]; then
     echo "Submodule already populated, skipping."
 else
     git -C "$SCRIPT_DIR" submodule update --init --recursive
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to initialize dotnet/performance submodule."
+        exit 1
+    fi
 fi
 
 # Generate sample apps
 echo "Generating sample apps..."
 "$SCRIPT_DIR/generate-apps.sh"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to generate sample apps."
+    exit 1
+fi
 
 echo ""
 echo "=== Environment setup complete ==="

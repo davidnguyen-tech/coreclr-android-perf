@@ -149,7 +149,7 @@ fi
 # ---------------------------------------------------------------------------
 # IPC / dsrouter names
 # ---------------------------------------------------------------------------
-IPC_NAME="$TRACE_DIR/dotnet-dsrouter-android"
+IPC_NAME="/tmp/dsrouter-$$"
 
 # Cleanup function
 DSROUTER_PID=""
