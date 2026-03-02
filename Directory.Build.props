@@ -8,6 +8,7 @@
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>True</UseMonoRuntime>
     <RunAOTCompilation>True</RunAOTCompilation>
     <AndroidEnableProfiledAot>False</AndroidEnableProfiledAot>
   </PropertyGroup>
@@ -16,12 +17,24 @@
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>True</UseMonoRuntime>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(_BuildConfig)' == 'JIT'">
+  <PropertyGroup Condition="'$(_BuildConfig)' == 'MONO_JIT'">
     <Configuration>Release</Configuration>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>True</UseMonoRuntime>
+    <RunAOTCompilation>False</RunAOTCompilation>
+    <PublishReadyToRun>False</PublishReadyToRun>
+    <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_BuildConfig)' == 'CORECLR_JIT'">
+    <Configuration>Release</Configuration>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
+    <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
     <RunAOTCompilation>False</RunAOTCompilation>
     <PublishReadyToRun>False</PublishReadyToRun>
     <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
@@ -31,6 +44,7 @@
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
@@ -41,6 +55,7 @@
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
@@ -51,6 +66,7 @@
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
     <TargetFramework>net11.0-android</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
