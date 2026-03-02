@@ -80,6 +80,9 @@ fi
 
 echo "=== Building $SAMPLE_APP ($RUNTIME, $BUILD_CONFIG) ==="
 
+# Clean previous build artifacts to avoid stale state between configs
+rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
+
 # Build the APK
 ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 \
     -bl:"$BUILD_DIR/${SAMPLE_APP}_${RUNTIME}_${BUILD_CONFIG}.binlog" \
