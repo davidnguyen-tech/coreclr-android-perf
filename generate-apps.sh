@@ -62,6 +62,11 @@ patch = """
     <AndroidEnvironment Include="$(MSBuildThisFileDirectory)..\\..\\env.txt" />
   </ItemGroup>
 
+  <!-- PGO instrumentation for .nettrace collection -->
+  <ItemGroup Condition="'$(CollectNetTrace)'=='true'">
+    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)..\\..\\env-nettrace.txt" />
+  </ItemGroup>
+
   <!-- PGO profile support for R2R Composite builds -->
   <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
     <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)\\profiles\\*.mibc" />

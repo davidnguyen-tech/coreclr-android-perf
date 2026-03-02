@@ -110,6 +110,13 @@ fi
 "$LOCAL_DOTNET" tool install Microsoft.DotNet.XHarness.CLI --tool-path "$TOOLS_DIR" --version "*" --add-source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json
 echo "xharness: $("$TOOLS_DIR/xharness" version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
 
+# Install diagnostic tools (required for .nettrace collection)
+DIAG_FEED="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json"
+"$LOCAL_DOTNET" tool install dotnet-dsrouter --tool-path "$TOOLS_DIR" --version "*" --add-source "$DIAG_FEED"
+"$LOCAL_DOTNET" tool install dotnet-trace --tool-path "$TOOLS_DIR" --version "*" --add-source "$DIAG_FEED"
+echo "dotnet-dsrouter: installed" >> "$VERSIONS_LOG"
+echo "dotnet-trace: installed" >> "$VERSIONS_LOG"
+
 # Initialize the dotnet/performance submodule
 echo "Initializing dotnet/performance submodule..."
 git submodule update --init --recursive external/performance
