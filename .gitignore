@@ -63,4 +63,5 @@ apps/
 .DS_Store
 perfdata/
 traces/
+results/
 [Nn]u[Gg]et.config

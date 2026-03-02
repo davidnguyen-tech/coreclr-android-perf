@@ -117,6 +117,10 @@ fi
 # Run startup measurement using dotnet/performance's test.py
 cd "$SCENARIOS_DIR/genericandroidstartup" || { echo "Error: dotnet/performance scenario directory not found. Run ./prepare.sh first."; exit 1; }
 
+# Create results directory
+RESULT_NAME="${SAMPLE_APP}_${RUNTIME}_${BUILD_CONFIG}"
+mkdir -p "$RESULTS_DIR"
+
 python3 test.py devicestartup \
     --device-type android \
     --package-path "$APK_PATH" \
@@ -124,6 +128,12 @@ python3 test.py devicestartup \
     "$@"
 
 RESULT=$?
+
+# Save the raw trace and any generated reports
+TRACE_SRC="traces/PerfTest/runoutput.trace"
+if [ -f "$TRACE_SRC" ]; then
+    cp "$TRACE_SRC" "$RESULTS_DIR/${RESULT_NAME}.trace"
+fi
 
 cd "$SCRIPT_DIR" || exit 1
 
@@ -134,3 +144,6 @@ fi
 
 echo ""
 echo "=== Measurement complete ==="
+if [ -f "$RESULTS_DIR/${RESULT_NAME}.trace" ]; then
+    echo "Results saved to: results/${RESULT_NAME}.trace"
+fi
