@@ -92,7 +92,7 @@ for i in "${!CONFIGS[@]}"; do
         MIN=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $3}' | sed 's/[^0-9.]//g')
         MAX=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $4}' | sed 's/[^0-9.]//g')
         # Parse APK size from measure_startup.sh output
-        APK_SIZE_MB=$(echo "$OUTPUT" | grep -o '([0-9.]* MB)' | sed 's/[()]//g; s/ MB//')
+        APK_SIZE_MB=$(echo "$OUTPUT" | grep "APK size:" | sed 's/.*APK size: \([0-9.]*\) MB.*/\1/')
         APK_SIZE_BYTES=$(echo "$OUTPUT" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
         echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  apk=${APK_SIZE_MB}MB"
         echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"

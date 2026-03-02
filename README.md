@@ -35,7 +35,7 @@ Repository for measuring startup performance, build times, and APK sizes of .NET
 
     ```bash
     # Single configuration
-    ./measure_startup.sh dotnet-new-android coreclr R2R
+    ./measure_startup.sh dotnet-new-android R2R
 
     # All configurations
     ./measure_all.sh --startup-iterations 10
@@ -65,12 +65,10 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 ### Measuring Startup
 
 ```bash
-./measure_startup.sh <app> <runtime> <build-config> [options]
+./measure_startup.sh <app> <build-config> [options]
 ```
 
 **Apps:** `dotnet-new-android`, `dotnet-new-maui`, `dotnet-new-maui-samplecontent`
-
-**Runtimes:** `mono`, `coreclr`
 
 **Build configs:** `MONO_JIT`, `CORECLR_JIT`, `AOT`, `PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
 
@@ -81,19 +79,19 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 - `--fully-drawn-extra-delay N` — Extra delay for fully drawn time (seconds)
 - `--trace-perfetto` — Capture a perfetto trace after measurements
 
-Results are saved to `results/<app>_<runtime>_<config>.trace`.
+Results are saved to `results/<app>_<config>.trace`.
 
 **Examples:**
 
 ```bash
-# CoreCLR R2R startup of dotnet new android
-./measure_startup.sh dotnet-new-android coreclr R2R
+# R2R startup of dotnet new android
+./measure_startup.sh dotnet-new-android R2R
 
 # Mono JIT startup of MAUI app with animations disabled
-./measure_startup.sh dotnet-new-maui mono MONO_JIT --disable-animations
+./measure_startup.sh dotnet-new-maui MONO_JIT --disable-animations
 
-# CoreCLR R2R Composite with PGO
-./measure_startup.sh dotnet-new-maui-samplecontent coreclr R2R_COMP_PGO
+# R2R Composite with PGO
+./measure_startup.sh dotnet-new-maui-samplecontent R2R_COMP_PGO
 ```
 
 ### Measuring All Configurations
@@ -102,19 +100,18 @@ Results are saved to `results/<app>_<runtime>_<config>.trace`.
 ./measure_all.sh [options]
 ```
 
-Runs `measure_startup.sh` for all (app, runtime, config) combinations and produces a summary table and CSV.
+Runs `measure_startup.sh` for all (app, config) combinations and produces a summary table and CSV.
 
 **Options:**
 - `--app <name>` — Measure only this app (can be repeated)
-- `--runtime <mono|coreclr>` — Measure only this runtime (can be repeated)
 - `--startup-iterations N` — Iterations per config (default: 10)
 
-**Output:** `results/summary.csv` with columns: app, runtime, config, avg_ms, min_ms, max_ms, iterations.
+**Output:** `results/summary.csv` with columns: app, config, avg_ms, min_ms, max_ms, apk_size_mb, apk_size_bytes, iterations.
 
 **Examples:**
 
 ```bash
-# All 21 configurations with 10 iterations each
+# All configurations with 10 iterations each
 ./measure_all.sh
 
 # Quick sweep with 3 iterations
@@ -122,9 +119,6 @@ Runs `measure_startup.sh` for all (app, runtime, config) combinations and produc
 
 # Only Android app, all configs
 ./measure_all.sh --app dotnet-new-android
-
-# Only CoreCLR configs for MAUI app
-./measure_all.sh --app dotnet-new-maui --runtime coreclr
 ```
 
 ### Collecting .nettrace Startup Traces
@@ -176,17 +170,17 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 ### Building / Running Sample Apps Manually
 
 ```bash
-./build.sh <app> <mono|coreclr> <build|run> <ntimes> [additional_args]
+./build.sh <app> <build-config> <build|run> <ntimes> [additional_args]
 ```
 
 **Examples:**
 
 ```bash
 # Build dotnet new android with Mono JIT
-./build.sh dotnet-new-android mono build 1 -p:_BuildConfig=MONO_JIT
+./build.sh dotnet-new-android MONO_JIT build 1
 
-# Run dotnet new maui with CoreCLR R2R + marshal methods
-./build.sh dotnet-new-maui coreclr run 1 "-p:_BuildConfig=R2R -p:AndroidEnableMarshalMethods=true"
+# Run dotnet new maui with R2R + marshal methods
+./build.sh dotnet-new-maui R2R run 1 "-p:AndroidEnableMarshalMethods=true"
 ```
 
 Build artifacts are copied to `./build/` for further inspection (APKs, binlogs).

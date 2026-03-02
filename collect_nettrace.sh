@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Collects a .nettrace file for a given (app, runtime, build-config) tuple.
+# Collects a .nettrace file for a given (app, build-config) tuple.
 # Uses dotnet-dsrouter + dotnet-trace to bridge diagnostics from an Android
 # device/emulator to the host, inspired by dotnet-optimization's
 # DotNet_Maui_Android_Base scenario.
@@ -37,34 +37,32 @@ fi
 # Usage
 # ---------------------------------------------------------------------------
 print_usage() {
-    echo "Usage: $0 <app> <runtime> <build-config> [options]"
+    echo "Usage: $0 <app> <build-config> [options]"
     echo ""
-    echo "Collects a .nettrace startup trace for the given (app, runtime, build-config) tuple."
+    echo "Collects a .nettrace startup trace for the given (app, build-config) tuple."
     echo ""
     echo "Apps:     dotnet-new-android, dotnet-new-maui, dotnet-new-maui-samplecontent"
-    echo "Runtimes: mono, coreclr"
-    echo "Configs:  JIT, AOT, PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
+    echo "Configs:  MONO_JIT, CORECLR_JIT, AOT, PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
     echo "  --duration N             Trace duration in seconds (default: 60)"
     echo "  --force                  Re-collect even if trace already exists"
     echo "  --pgo-instrumentation    Include PGO instrumentation env vars for higher-quality traces"
     echo ""
-    echo "Output: traces/<app>_<runtime>_<config>/android-startup.nettrace"
+    echo "Output: traces/<app>_<config>/android-startup.nettrace"
     exit 1
 }
 
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
-if [[ -z "$1" || -z "$2" || -z "$3" ]]; then
+if [[ -z "$1" || -z "$2" ]]; then
     print_usage
 fi
 
 SAMPLE_APP=$1
-RUNTIME=$2
-BUILD_CONFIG=$3
-shift 3
+BUILD_CONFIG=$2
+shift 2
 
 DURATION=60
 FORCE=false
@@ -97,12 +95,6 @@ if [[ "$SAMPLE_APP" != "dotnet-new-android" && "$SAMPLE_APP" != "dotnet-new-maui
     print_usage
 fi
 
-# Validate runtime
-if [[ "$RUNTIME" != "mono" && "$RUNTIME" != "coreclr" ]]; then
-    echo "Invalid runtime: $RUNTIME"
-    print_usage
-fi
-
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
 if [ ! -d "$APP_DIR" ]; then
     echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."
@@ -112,7 +104,7 @@ fi
 # ---------------------------------------------------------------------------
 # Check if trace already exists
 # ---------------------------------------------------------------------------
-TRACE_DIR="$TRACES_DIR/${SAMPLE_APP}_${RUNTIME}_${BUILD_CONFIG}"
+TRACE_DIR="$TRACES_DIR/${SAMPLE_APP}_${BUILD_CONFIG}"
 TRACE_FILE="$TRACE_DIR/android-startup.nettrace"
 
 if [ -f "$TRACE_FILE" ] && [ "$FORCE" = false ]; then
@@ -127,15 +119,7 @@ mkdir -p "$TRACE_DIR"
 # ---------------------------------------------------------------------------
 # Build MSBuild arguments
 # ---------------------------------------------------------------------------
-MSBUILD_ARGS="-p:AndroidEnableProfiler=true"
-
-if [[ "$RUNTIME" == "mono" ]]; then
-    MSBUILD_ARGS="$MSBUILD_ARGS -p:UseMonoRuntime=true"
-elif [[ "$RUNTIME" == "coreclr" ]]; then
-    MSBUILD_ARGS="$MSBUILD_ARGS -p:UseMonoRuntime=false"
-fi
-
-MSBUILD_ARGS="$MSBUILD_ARGS -p:_BuildConfig=$BUILD_CONFIG"
+MSBUILD_ARGS="-p:AndroidEnableProfiler=true -p:_BuildConfig=$BUILD_CONFIG"
 
 if [ "$PGO_INSTRUMENTATION" = true ]; then
     MSBUILD_ARGS="$MSBUILD_ARGS -p:CollectNetTrace=true"
@@ -178,7 +162,7 @@ trap cleanup EXIT
 # ---------------------------------------------------------------------------
 # Step 1: Start dsrouter
 # ---------------------------------------------------------------------------
-echo "=== Collecting .nettrace for $SAMPLE_APP ($RUNTIME, $BUILD_CONFIG) ==="
+echo "=== Collecting .nettrace for $SAMPLE_APP ($BUILD_CONFIG) ==="
 echo "Trace duration: ${DURATION}s"
 if [ "$PGO_INSTRUMENTATION" = true ]; then
     echo "PGO instrumentation: enabled"
@@ -216,7 +200,7 @@ echo "--- Building and deploying app with diagnostics enabled ---"
 ${LOCAL_DOTNET} build -t:Run -c Release \
     -f net11.0-android -r android-arm64 \
     -tl:off \
-    -bl:"$TRACE_DIR/${SAMPLE_APP}_${RUNTIME}_${BUILD_CONFIG}_nettrace.binlog" \
+    -bl:"$TRACE_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_nettrace.binlog" \
     "$APP_DIR/$SAMPLE_APP.csproj" \
     $MSBUILD_ARGS
 
