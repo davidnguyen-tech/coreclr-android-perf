@@ -5,7 +5,7 @@
 # device/emulator to the host, inspired by dotnet-optimization's
 # DotNet_Maui_Android_Base scenario.
 
-source "$(dirname "$0")/init.sh"
+source "$(dirname "$0")/../init.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites

@@ -68,3 +68,8 @@ results/
 profiles/
 profiles-old/
 profiles-new/
+
+# Stale root-level app directories (pre-apps/ convention)
+dotnet-new-android/
+dotnet-new-maui/
+dotnet-new-maui-samplecontent/

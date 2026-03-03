@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source "$(dirname "$0")/init.sh"
+source "$(dirname "$0")/../init.sh"
 
 # Check if the build directory exists
 if [[ ! -d "$BUILD_DIR" ]]; then

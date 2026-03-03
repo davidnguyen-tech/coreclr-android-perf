@@ -1,6 +1,6 @@
-# .NET Android Performance Measurements
+# .NET Mobile Performance Measurements
 
-Repository for measuring startup performance, build times, and APK sizes of .NET Android apps using the [dotnet/performance](https://github.com/dotnet/performance) tooling.
+Repository for measuring startup performance, build times, and app sizes of .NET mobile apps using the [dotnet/performance](https://github.com/dotnet/performance) tooling. Currently supports **Android**, with **iOS** support planned.
 
 ## Prerequisites
 
@@ -34,8 +34,11 @@ Repository for measuring startup performance, build times, and APK sizes of .NET
 3. Run startup measurements:
 
     ```bash
-    # Single configuration
+    # Single configuration (android is the default platform)
     ./measure_startup.sh dotnet-new-android R2R
+
+    # Explicit platform
+    ./measure_startup.sh dotnet-new-android R2R --platform android
 
     # All configurations
     ./measure_all.sh --startup-iterations 10
@@ -73,6 +76,7 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 **Build configs:** `MONO_JIT`, `CORECLR_JIT`, `MONO_AOT`, `MONO_PAOT`, `R2R`, `R2R_COMP`, `R2R_COMP_PGO`
 
 **Options:**
+- `--platform <android|ios>` — Target platform (default: `android`; iOS coming soon)
 - `--startup-iterations N` — Number of startup iterations (default: 10)
 - `--disable-animations` — Disable device animations during measurement
 - `--use-fully-drawn-time` — Use fully drawn time instead of displayed time
@@ -103,10 +107,11 @@ Results are saved to `results/<app>_<config>.trace`.
 Runs `measure_startup.sh` for all (app, config) combinations and produces a summary table and CSV.
 
 **Options:**
+- `--platform <name>` — Target platform: `android`, `ios` (default: `android`)
 - `--app <name>` — Measure only this app (can be repeated)
 - `--startup-iterations N` — Iterations per config (default: 10)
 
-**Output:** `results/summary.csv` with columns: app, config, avg_ms, min_ms, max_ms, apk_size_mb, apk_size_bytes, iterations.
+**Output:** `results/summary.csv` with columns: app, config, avg_ms, min_ms, max_ms, pkg_size_mb, pkg_size_bytes, iterations.
 
 **Examples:**
 
@@ -121,10 +126,10 @@ Runs `measure_startup.sh` for all (app, config) combinations and produces a summ
 ./measure_all.sh --app dotnet-new-android
 ```
 
-### Collecting .nettrace Startup Traces
+### Collecting .nettrace Startup Traces (Android)
 
 ```bash
-./collect_nettrace.sh <app> <build-config> [options]
+./android/collect_nettrace.sh <app> <build-config> [options]
 ```
 
 Collects a `.nettrace` startup trace for a given (app, build-config) combination. The trace captures detailed runtime events (JIT compilation, assembly loading, GC, exceptions, thread pool, interop) that can be used to analyze startup behavior.
@@ -158,13 +163,13 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 
 ```bash
 # Collect a CoreCLR R2R trace with default 60s duration
-./collect_nettrace.sh dotnet-new-android R2R
+./android/collect_nettrace.sh dotnet-new-android R2R
 
 # Collect a Mono JIT trace with 30s duration
-./collect_nettrace.sh dotnet-new-maui MONO_JIT --duration 30
+./android/collect_nettrace.sh dotnet-new-maui MONO_JIT --duration 30
 
 # Re-collect an existing trace with PGO instrumentation
-./collect_nettrace.sh dotnet-new-maui-samplecontent R2R_COMP_PGO --force --pgo-instrumentation
+./android/collect_nettrace.sh dotnet-new-maui-samplecontent R2R_COMP_PGO --force --pgo-instrumentation
 ```
 
 ### Building / Running Sample Apps Manually
@@ -185,10 +190,10 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 
 Build artifacts are copied to `./build/` for further inspection (APKs, binlogs).
 
-### Measuring APK Sizes
+### Measuring APK Sizes (Android)
 
 ```bash
-./print_apk_sizes.sh [-unzipped]
+./android/print_apk_sizes.sh [-unzipped]
 ```
 
 Scans the `./build/` directory for signed APKs and prints their sizes. Pass `-unzipped` to unpack and show extracted sizes.
@@ -218,19 +223,25 @@ Configurations are defined in [`Directory.Build.props`](./Directory.Build.props)
 ```
 ├── global.json              # SDK version pinning
 ├── rollback.json             # Workload version pinning
-├── Directory.Build.props     # Build configuration presets
-├── Directory.Build.targets   # Build targets (R2R workarounds)
+├── Directory.Build.props     # Shared build configuration presets
+├── Directory.Build.targets   # Shared build targets
+├── init.sh                   # Common helpers (platform resolution, paths)
 ├── prepare.sh                # Environment setup (SDK, workloads, xharness, apps)
 ├── generate-apps.sh          # Dynamic sample app generation
-├── build.sh                  # Build/run sample apps
-├── measure_startup.sh        # Startup measurement using dotnet/performance
-├── measure_all.sh            # Run all configurations and produce summary
-├── collect_nettrace.sh       # .nettrace startup trace collection
+├── build.sh                  # Build/run sample apps (--platform aware)
+├── measure_startup.sh        # Startup measurement (--platform aware)
+├── measure_all.sh            # Run all configurations (--platform aware)
 ├── clean.sh                  # Clean build artifacts
-├── print_apk_sizes.sh        # APK size reporting
 ├── dotnet-local.sh           # Proxy to local .NET SDK
-├── env.txt                   # DiagnosticPorts config for profiling
-├── env-nettrace.txt          # PGO instrumentation env vars for trace collection
+├── android/                  # Android-specific files
+│   ├── build-configs.props   # Android build configuration presets
+│   ├── build-workarounds.targets # Android build workarounds (R2R, etc.)
+│   ├── collect_nettrace.sh   # .nettrace startup trace collection
+│   ├── print_apk_sizes.sh    # APK size reporting
+│   ├── env.txt               # DiagnosticPorts config for profiling
+│   └── env-nettrace.txt      # PGO instrumentation env vars for trace collection
+├── ios/                      # iOS-specific files (placeholder)
+│   └── README.md             # iOS support roadmap
 ├── profiles/                 # Shared PGO .mibc profiles
 ├── external/performance/     # dotnet/performance submodule
 ├── apps/                     # Generated sample apps (gitignored)

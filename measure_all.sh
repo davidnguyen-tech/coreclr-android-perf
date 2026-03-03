@@ -3,7 +3,7 @@
 source "$(dirname "$0")/init.sh"
 
 ALL_CONFIGS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
-APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
+PLATFORM="android"
 
 ITERATIONS=10
 EXTRA_ARGS=()
@@ -15,12 +15,14 @@ print_usage() {
     echo "Runs startup measurements for all (app, config) combinations."
     echo ""
     echo "Options:"
+    echo "  --platform <name>          Target platform: android, ios (default: android)"
     echo "  --app <name>               Measure only this app (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
     echo "  --help                     Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0                                          # All apps, all configs, 10 iterations"
+    echo "  $0 --platform ios                           # iOS platform, all configs"
     echo "  $0 --startup-iterations 3                   # All apps, all configs, 3 iterations"
     echo "  $0 --app dotnet-new-android                 # Only Android app, all configs"
     exit 0
@@ -28,6 +30,14 @@ print_usage() {
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
         --app)
             if [[ -z "$2" || "$2" == --* ]]; then
                 echo "Error: --app requires a value"
@@ -54,6 +64,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Resolve platform-specific configuration
+resolve_platform_config "$PLATFORM"
+PLATFORM_DISPLAY="$(echo "$PLATFORM" | sed 's/./\U&/')"
+
+# Default app list per platform
+case "$PLATFORM" in
+    android)
+        APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
+        ;;
+    ios)
+        APPS=()
+        ;;
+esac
+
 # Default to all apps if none selected
 if [ ${#SELECTED_APPS[@]} -eq 0 ]; then
     SELECTED_APPS=("${APPS[@]}")
@@ -73,7 +97,7 @@ FAILED=0
 FAILURES=()
 
 echo "=============================================="
-echo " Android Startup Measurements"
+echo " $PLATFORM_DISPLAY Startup Measurements"
 echo " Configurations: $TOTAL"
 echo " Iterations per config: $ITERATIONS"
 echo "=============================================="
@@ -81,7 +105,7 @@ echo ""
 
 mkdir -p "$RESULTS_DIR"
 SUMMARY_FILE="$RESULTS_DIR/summary.csv"
-echo "app,config,avg_ms,min_ms,max_ms,apk_size_mb,apk_size_bytes,iterations" > "$SUMMARY_FILE"
+echo "app,config,avg_ms,min_ms,max_ms,pkg_size_mb,pkg_size_bytes,iterations" > "$SUMMARY_FILE"
 
 for i in "${!CONFIGS[@]}"; do
     IFS='|' read -r app config <<< "${CONFIGS[$i]}"
@@ -91,7 +115,7 @@ for i in "${!CONFIGS[@]}"; do
     echo "----------------------------------------------"
 
     OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-        --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+        --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -eq 0 ]; then
@@ -99,9 +123,9 @@ for i in "${!CONFIGS[@]}"; do
         AVG=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $2}' | sed 's/[^0-9.]//g')
         MIN=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $3}' | sed 's/[^0-9.]//g')
         MAX=$(echo "$OUTPUT" | grep "Generic Startup" | awk -F'|' '{print $4}' | sed 's/[^0-9.]//g')
-        # Parse APK size from measure_startup.sh output
-        APK_SIZE_MB=$(echo "$OUTPUT" | grep "APK size:" | sed -n 's/.*APK size: \([0-9.]*\) MB.*/\1/p')
-        APK_SIZE_BYTES=$(echo "$OUTPUT" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
+        # Parse package size from measure_startup.sh output
+        APK_SIZE_MB=$(echo "$OUTPUT" | grep "$PLATFORM_PACKAGE_LABEL size:" | sed -n "s/.*$PLATFORM_PACKAGE_LABEL size: \([0-9.]*\) MB.*/\1/p")
+        APK_SIZE_BYTES=$(echo "$OUTPUT" | grep "$PLATFORM_PACKAGE_LABEL size:" | grep -o '([0-9]* bytes)' | sed 's/[()]//g; s/ bytes//')
         if [ -z "$APK_SIZE_MB" ]; then
             APK_SIZE_MB="unknown"
         fi
@@ -112,7 +136,7 @@ for i in "${!CONFIGS[@]}"; do
             FAILURES+=("$app|$config")
             FAILED=$((FAILED + 1))
         else
-            echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  apk=${APK_SIZE_MB}MB"
+            echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  pkg=${APK_SIZE_MB}MB"
             echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
             PASSED=$((PASSED + 1))
         fi
@@ -142,10 +166,10 @@ echo ""
 
 # Print the summary table
 if [ -f "$SUMMARY_FILE" ]; then
-    echo "App                          | Config         | Avg (ms) | Min (ms) | Max (ms) | APK (MB)"
+    echo "App                          | Config         | Avg (ms) | Min (ms) | Max (ms) | $PLATFORM_PACKAGE_LABEL (MB)"
     echo "-----------------------------|----------------|----------|----------|----------|--------"
-    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app config avg min max apk_mb apk_bytes iters; do
-        printf "%-28s | %-14s | %8s | %8s | %8s | %8s\n" "$app" "$config" "$avg" "$min" "$max" "$apk_mb"
+    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app config avg min max pkg_mb pkg_bytes iters; do
+        printf "%-28s | %-14s | %8s | %8s | %8s | %8s\n" "$app" "$config" "$avg" "$min" "$max" "$pkg_mb"
     done
 fi
 
