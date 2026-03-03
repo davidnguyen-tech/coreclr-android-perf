@@ -10,6 +10,23 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
     exit 1
 fi
 
+# Parse --platform flag (default: generate all)
+GEN_ANDROID=true
+GEN_IOS=true
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --platform)
+            case "$2" in
+                android) GEN_ANDROID=true; GEN_IOS=false ;;
+                ios) GEN_ANDROID=false; GEN_IOS=true ;;
+                *) echo "Error: Unknown platform '$2'"; exit 1 ;;
+            esac
+            shift 2
+            ;;
+        *) shift ;;
+    esac
+done
+
 APPS_DIR="$SCRIPT_DIR/apps"
 
 generate_app() {
@@ -47,12 +64,19 @@ generate_app() {
         exit 1
     fi
 
-    # For MAUI apps, set TargetFrameworks to Android+iOS
+    # For MAUI apps, set TargetFrameworks based on selected platforms
     local csproj="$app_dir/$app_name.csproj"
     if [ "$template" = "maui" ] && [ -f "$csproj" ]; then
-        python3 - "$csproj" << 'TFMEOF'
+        local maui_tfms=""
+        if [ "$GEN_ANDROID" = true ]; then maui_tfms="net11.0-android"; fi
+        if [ "$GEN_IOS" = true ]; then
+            if [ -n "$maui_tfms" ]; then maui_tfms="$maui_tfms;"; fi
+            maui_tfms="${maui_tfms}net11.0-ios"
+        fi
+        python3 - "$csproj" "$maui_tfms" << 'TFMEOF'
 import sys, re
 csproj = sys.argv[1]
+tfms = sys.argv[2]
 content = open(csproj).read()
 content = re.sub(
     r'<TargetFrameworks[^>]*>.*?</TargetFrameworks>\s*\n\s*',
@@ -62,12 +86,12 @@ content = re.sub(
 )
 content = content.replace(
     '<PropertyGroup>\n',
-    '<PropertyGroup>\n\t\t<TargetFrameworks>net11.0-android;net11.0-ios</TargetFrameworks>\n',
+    f'<PropertyGroup>\n\t\t<TargetFrameworks>{tfms}</TargetFrameworks>\n',
     1
 )
 open(csproj, 'w').write(content)
 TFMEOF
-        echo "Set $app_name to Android+iOS TFMs"
+        echo "Set $app_name TargetFrameworks to $maui_tfms"
     fi
 
     # Apply profiling patches
@@ -103,13 +127,13 @@ csproj = sys.argv[1]
 is_maui = sys.argv[2] == "true"
 
 patch = """
-  <!-- Profiling support -->
-  <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true'">
+  <!-- Profiling support (Android only) -->
+  <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true' and '$(TargetPlatformIdentifier)'=='android'">
     <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../android/env.txt" />
   </ItemGroup>
 
-  <!-- PGO instrumentation for .nettrace collection -->
-  <ItemGroup Condition="'$(CollectNetTrace)'=='true'">
+  <!-- PGO instrumentation for .nettrace collection (Android only) -->
+  <ItemGroup Condition="'$(CollectNetTrace)'=='true' and '$(TargetPlatformIdentifier)'=='android'">
     <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../android/env-nettrace.txt" />
   </ItemGroup>
 """
@@ -147,11 +171,15 @@ PYEOF
     echo "Applied profiling/PGO patches to $csproj"
 }
 
-# Generate all sample apps
+# Generate sample apps based on selected platforms
 echo "=== Generating sample apps ==="
 
-generate_app "android" "dotnet-new-android"
-generate_app "ios" "dotnet-new-ios"
+if [ "$GEN_ANDROID" = true ]; then
+    generate_app "android" "dotnet-new-android"
+fi
+if [ "$GEN_IOS" = true ]; then
+    generate_app "ios" "dotnet-new-ios"
+fi
 generate_app "maui" "dotnet-new-maui"
 generate_app "maui" "dotnet-new-maui-samplecontent" "--sample-content"
 

@@ -5,6 +5,7 @@
     <TargetFramework>net11.0-ios</TargetFramework>
     <UseMonoRuntime>True</UseMonoRuntime>
     <RunAOTCompilation>True</RunAOTCompilation>
+    <MtouchProfiledAOT>False</MtouchProfiledAOT>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'MONO_PAOT'">
     <Configuration>Release</Configuration>
@@ -59,6 +60,7 @@
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
+    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
     <PGO>True</PGO>
   </PropertyGroup>
 </Project>

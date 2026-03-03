@@ -208,7 +208,7 @@ fi
 
 # Generate sample apps
 echo "Generating sample apps..."
-"$SCRIPT_DIR/generate-apps.sh"
+"$SCRIPT_DIR/generate-apps.sh" --platform "$PLATFORM"
 if [ $? -ne 0 ]; then
     echo "Error: Failed to generate sample apps."
     exit 1
