@@ -3,20 +3,29 @@
 source "$(dirname "$0")/init.sh"
 
 if [[ -z "$1" ]]; then
-    echo "Usage: $0 <all|dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent>"
+    echo "Usage: $0 <all|APP_NAME>"
+    echo "  all        Clean all apps found in $APPS_DIR"
+    echo "  APP_NAME   Clean a specific app by directory name"
     exit 1
 fi
 
 SAMPLE_APP=$1
 
 if [[ "$SAMPLE_APP" == "all" ]]; then
-    APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
+    APPS=()
+    for d in "$APPS_DIR"/*/; do
+        [ -d "$d" ] && APPS+=("$(basename "$d")")
+    done
+    if [[ ${#APPS[@]} -eq 0 ]]; then
+        echo "No apps found in $APPS_DIR"
+        exit 0
+    fi
 else
-    if [[ "$SAMPLE_APP" == "dotnet-new-android" || "$SAMPLE_APP" == "dotnet-new-maui" || "$SAMPLE_APP" == "dotnet-new-maui-samplecontent" ]]; then
+    if [[ -d "$APPS_DIR/$SAMPLE_APP" ]]; then
         APPS=("$SAMPLE_APP")
     else
-        echo "Invalid option: $SAMPLE_APP"
-        echo "Usage: $0 <all|dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent>"
+        echo "App not found: $APPS_DIR/$SAMPLE_APP"
+        echo "Usage: $0 <all|APP_NAME>"
         exit 1
     fi
 fi

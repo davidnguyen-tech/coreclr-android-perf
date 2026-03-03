@@ -107,12 +107,12 @@ is_maui = sys.argv[2] == "true"
 patch = """
   <!-- Profiling support -->
   <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true'">
-    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../env.txt" />
+    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../android/env.txt" />
   </ItemGroup>
 
   <!-- PGO instrumentation for .nettrace collection -->
   <ItemGroup Condition="'$(CollectNetTrace)'=='true'">
-    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../env-nettrace.txt" />
+    <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../android/env-nettrace.txt" />
   </ItemGroup>
 """
 

@@ -1,20 +1,5 @@
 <Project>
-  <Target Name="GenerateInfo" AfterTargets="Build">
-    <Message Importance="High" Text="[BuildInfo]:TargetFramework=$(TargetFramework);ObjDir=$(IntermediateOutputPath);OutputDir=$(OutputPath);PackageFilename=$(_AndroidPackage)-Signed.$(AndroidPackageFormat)"/>
-  </Target>
-  <Target Name="_PreventRunningRemoveRegisterAttributeTaskBefore" BeforeTargets="_RemoveRegisterAttribute"
-    Condition="'$(PublishReadyToRun)' == 'True'">
-    <PropertyGroup>
-      <_AndroidStripILAfterAOTBackup>$(AndroidStripILAfterAOT)</_AndroidStripILAfterAOTBackup>
-      <AndroidStripILAfterAOT>True</AndroidStripILAfterAOT>
-    </PropertyGroup>
-    <Message Importance="High" Text="Changing the value of AndroidStripILAfterAOT from: '$(_AndroidStripILAfterAOTBackup)' to: 'true' to prevent running RemoveRegisterAttribute build task for R2R builds"/>
-  </Target>
-  <Target Name="_PreventRunningRemoveRegisterAttributeTaskAfter" AfterTargets="_RemoveRegisterAttribute"
-    Condition="'$(PublishReadyToRun)' == 'True'">
-    <PropertyGroup>
-      <AndroidStripILAfterAOT>$(_AndroidStripILAfterAOTBackup)</AndroidStripILAfterAOT>
-    </PropertyGroup>
-    <Message Importance="High" Text="Resetting the value of AndroidStripILAfterAOT to original value: '$(_AndroidStripILAfterAOTBackup)'"/>
-  </Target>
+  <!-- Platform-specific build targets -->
+  <Import Project="$(MSBuildThisFileDirectory)/android/build-workarounds.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)/android/build-workarounds.targets')" />
 </Project>

@@ -5,6 +5,7 @@ source "$(dirname "$0")/init.sh"
 # Validate passed parameters
 FORCE=false
 USE_ROLLBACK=false
+PLATFORM="android"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -16,13 +17,30 @@ while [[ $# -gt 0 ]]; do
             USE_ROLLBACK=true
             shift
             ;;
+        --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
         *)
             echo "Error: Invalid parameter '$1'."
-            echo "Usage: $0 [-f] [-userollback]"
+            echo "Usage: $0 [-f] [-userollback] [--platform android|ios]"
             exit 1
             ;;
     esac
 done
+
+# Validate platform
+case "$PLATFORM" in
+    android|ios) ;;
+    *)
+        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, ios"
+        exit 1
+        ;;
+esac
 
 # Check if environment is already set up
 if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$FORCE" = false ]; then
@@ -107,9 +125,14 @@ if [ "$USE_ROLLBACK" = true ]; then
     fi
 fi
 
-# Install the Android and MAUI workloads
-# Use maui-android (not maui) to avoid pulling in iOS/Mac workloads that may be unavailable
-"$LOCAL_DOTNET" workload install android maui-android
+# Install platform-specific workloads
+if [ "$PLATFORM" = "android" ]; then
+    WORKLOADS="android maui-android"
+elif [ "$PLATFORM" = "ios" ]; then
+    WORKLOADS="ios maui-ios"
+fi
+echo "Installing workloads for $PLATFORM: $WORKLOADS"
+"$LOCAL_DOTNET" workload install $WORKLOADS
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install workloads."
     exit 1
@@ -117,13 +140,13 @@ fi
 
 # Log installed workload info
 INSTALLED_WORKLOADS=$("$LOCAL_DOTNET" workload --info)
-ANDROID_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[android\]")
-if [ -n "$ANDROID_WORKLOAD_INFO" ]; then
-    ANDROID_MANIFEST_VERSION=$(echo "$ANDROID_WORKLOAD_INFO" | grep "Manifest Version" | awk '{print $3}')
-    echo "dotnet android workload manifest version: $ANDROID_MANIFEST_VERSION" >> "$VERSIONS_LOG"
+PLATFORM_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[$PLATFORM\]")
+if [ -n "$PLATFORM_WORKLOAD_INFO" ]; then
+    PLATFORM_MANIFEST_VERSION=$(echo "$PLATFORM_WORKLOAD_INFO" | grep "Manifest Version" | awk '{print $3}')
+    echo "dotnet $PLATFORM workload manifest version: $PLATFORM_MANIFEST_VERSION" >> "$VERSIONS_LOG"
 else
-    echo "android workload not installed"
-    echo "Fatal error: Android workload installation failed. Please retry running this script with the -f parameter to reset the environment."
+    echo "$PLATFORM workload not installed"
+    echo "Fatal error: $PLATFORM workload installation failed. Please retry running this script with the -f parameter to reset the environment."
     exit 1
 fi
 

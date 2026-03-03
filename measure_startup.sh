@@ -25,6 +25,7 @@ print_usage() {
     echo "Build configs: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
+    echo "  --platform <android|ios>      Target platform (default: android)"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -41,11 +42,29 @@ SAMPLE_APP=$1
 BUILD_CONFIG=$2
 shift 2
 
-# Validate app name
-if [[ "$SAMPLE_APP" != "dotnet-new-android" && "$SAMPLE_APP" != "dotnet-new-maui" && "$SAMPLE_APP" != "dotnet-new-maui-samplecontent" ]]; then
-    echo "Invalid app: $SAMPLE_APP"
-    print_usage
-fi
+# Parse options to extract --platform before passing remaining args to test.py
+PLATFORM="android"
+PASSTHROUGH_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
+        *)
+            PASSTHROUGH_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${PASSTHROUGH_ARGS[@]}"
+
+# Resolve platform-specific configuration
+resolve_platform_config "$PLATFORM" || exit 1
 
 # Validate build config
 VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
@@ -75,8 +94,8 @@ echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) ==="
 # Clean previous build artifacts to avoid stale state between configs
 rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
 
-# Build the APK
-${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 \
+# Build the package
+${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
     -bl:"$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog" \
     "$APP_DIR/$SAMPLE_APP.csproj" \
     $MSBUILD_ARGS
@@ -86,22 +105,22 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Find the signed APK
-APK_PATH=$(find "$APP_DIR" -name "*-Signed.apk" -path "*/Release/*" | head -1)
-if [ -z "$APK_PATH" ]; then
-    echo "Error: Could not find signed APK after build."
+# Find the built package
+PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" | head -1)
+if [ -z "$PACKAGE_PATH" ]; then
+    echo "Error: Could not find $PLATFORM_PACKAGE_LABEL package after build."
     exit 1
 fi
 
-# Record APK size
-APK_SIZE_BYTES=$(stat -f%z "$APK_PATH" 2>/dev/null || stat -c%s "$APK_PATH" 2>/dev/null)
-if [ -z "$APK_SIZE_BYTES" ]; then
-    echo "Warning: Could not determine APK size for $APK_PATH"
-    APK_SIZE_MB="unknown"
+# Record package size
+PACKAGE_SIZE_BYTES=$(stat -f%z "$PACKAGE_PATH" 2>/dev/null || stat -c%s "$PACKAGE_PATH" 2>/dev/null)
+if [ -z "$PACKAGE_SIZE_BYTES" ]; then
+    echo "Warning: Could not determine $PLATFORM_PACKAGE_LABEL size for $PACKAGE_PATH"
+    PACKAGE_SIZE_MB="unknown"
 else
-    APK_SIZE_MB=$(python3 -c "print(f'{$APK_SIZE_BYTES / 1048576:.2f}')")
+    PACKAGE_SIZE_MB=$(python3 -c "print(f'{$PACKAGE_SIZE_BYTES / 1048576:.2f}')")
 fi
-echo "Built APK: $APK_PATH (${APK_SIZE_MB} MB)"
+echo "Built $PLATFORM_PACKAGE_LABEL: $PACKAGE_PATH (${PACKAGE_SIZE_MB} MB)"
 echo ""
 echo "=== Measuring startup ==="
 
@@ -118,15 +137,15 @@ if [ -f "$TOOLS_DIR/xharness" ]; then
 fi
 
 # Run startup measurement using dotnet/performance's test.py
-cd "$SCENARIOS_DIR/genericandroidstartup" || { echo "Error: dotnet/performance scenario directory not found. Run ./prepare.sh first."; exit 1; }
+cd "$PLATFORM_SCENARIO_DIR" || { echo "Error: dotnet/performance scenario directory not found. Run ./prepare.sh first."; exit 1; }
 
 # Create results directory
 RESULT_NAME="${SAMPLE_APP}_${BUILD_CONFIG}"
 mkdir -p "$RESULTS_DIR"
 
 python3 test.py devicestartup \
-    --device-type android \
-    --package-path "$APK_PATH" \
+    --device-type "$PLATFORM_DEVICE_TYPE" \
+    --package-path "$PACKAGE_PATH" \
     --package-name "$PACKAGE_NAME" \
     "$@"
 
@@ -147,7 +166,7 @@ fi
 
 echo ""
 echo "=== Measurement complete ==="
-echo "APK size: ${APK_SIZE_MB} MB ($APK_SIZE_BYTES bytes)"
+echo "$PLATFORM_PACKAGE_LABEL size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
 if [ -f "$RESULTS_DIR/${RESULT_NAME}.trace" ]; then
     echo "Results saved to: results/${RESULT_NAME}.trace"
 fi

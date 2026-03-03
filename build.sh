@@ -2,19 +2,42 @@
 
 source "$(dirname "$0")/init.sh"
 
+# Extract --platform flag from arguments, default to android
+PLATFORM="android"
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
+        --platform=*)
+            PLATFORM="${1#*=}"
+            shift
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
+
+resolve_platform_config "$PLATFORM" || exit 1
+
 if [ ! -f "$LOCAL_DOTNET" ]; then
     echo "Error: $LOCAL_DOTNET does not exist. Please run ./prepare.sh first."
     exit 1
 fi
 
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "Usage: $0 [--platform <android|ios>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "  --platform: target platform (default: android)"
     echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
-    exit 1
-fi
-
-if [[ "$1" != "dotnet-new-android" && "$1" != "dotnet-new-maui" && "$1" != "dotnet-new-maui-samplecontent" ]]; then
-    echo "Invalid parameter. Allowed values are: dotnet-new-android, dotnet-new-maui, dotnet-new-maui-samplecontent"
     exit 1
 fi
 
@@ -68,8 +91,8 @@ for ((i=1; i<=REPEAT_COUNT; i++)); do
     logfile="$APP_DIR/msbuild_$timestamp.binlog"
     SAVE_OUTPUT_PATH="$BUILD_DIR/${SAMPLE_APP}_${timestamp}"
 
-    echo "Building $SAMPLE_APP with config $BUILD_CONFIG via: ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 -bl:$logfile $APP_DIR/$SAMPLE_APP.csproj $MSBUILD_ARGS $RUN_TARGET"
-    ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 -bl:"$logfile" "$APP_DIR/$SAMPLE_APP.csproj" $MSBUILD_ARGS $RUN_TARGET
+    echo "Building $SAMPLE_APP with config $BUILD_CONFIG via: ${LOCAL_DOTNET} build -c Release -f $PLATFORM_TFM -r $PLATFORM_RID -bl:$logfile $APP_DIR/$SAMPLE_APP.csproj $MSBUILD_ARGS $RUN_TARGET"
+    ${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" -bl:"$logfile" "$APP_DIR/$SAMPLE_APP.csproj" $MSBUILD_ARGS $RUN_TARGET
 
     mkdir -p "$SAVE_OUTPUT_PATH"
     cp -r "$APP_DIR/bin" "$SAVE_OUTPUT_PATH/"
