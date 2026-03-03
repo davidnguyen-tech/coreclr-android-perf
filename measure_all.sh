@@ -92,6 +92,11 @@ for app in "${SELECTED_APPS[@]}"; do
 done
 
 TOTAL=${#CONFIGS[@]}
+if [ "$TOTAL" -eq 0 ]; then
+    echo "Error: No app/config combinations to measure for platform '$PLATFORM'."
+    echo "Specify apps with --app or ensure the platform has a default app list."
+    exit 1
+fi
 PASSED=0
 FAILED=0
 FAILURES=()

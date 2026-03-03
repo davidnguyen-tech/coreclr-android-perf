@@ -39,7 +39,7 @@ resolve_platform_config() {
         ios)
             PLATFORM_TFM="net11.0-ios"
             PLATFORM_RID="ios-arm64"
-            PLATFORM_DEVICE_TYPE="apple"
+            PLATFORM_DEVICE_TYPE="ios"
             PLATFORM_SCENARIO_DIR="$SCENARIOS_DIR/genericiosstartup"
             PLATFORM_PACKAGE_GLOB="*.app"
             PLATFORM_PACKAGE_LABEL="APP"
