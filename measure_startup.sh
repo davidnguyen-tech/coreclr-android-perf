@@ -48,6 +48,10 @@ PASSTHROUGH_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios)"
+                exit 1
+            fi
             PLATFORM="$2"
             shift 2
             ;;

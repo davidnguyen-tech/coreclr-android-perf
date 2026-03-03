@@ -18,6 +18,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios)"
+                exit 1
+            fi
             PLATFORM="$2"
             shift 2
             ;;
