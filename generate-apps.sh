@@ -64,6 +64,13 @@ generate_app() {
         exit 1
     fi
 
+    # For iOS template apps, update TFM to match SDK version (template may default to older TFM)
+    local csproj="$app_dir/$app_name.csproj"
+    if [ "$template" = "ios" ] && [ -f "$csproj" ]; then
+        sed -i '' 's|<TargetFramework>net[0-9]*\.[0-9]*-ios</TargetFramework>|<TargetFramework>net11.0-ios</TargetFramework>|' "$csproj"
+        echo "Updated $app_name TFM to net11.0-ios"
+    fi
+
     # For MAUI apps, set TargetFrameworks based on selected platforms
     local csproj="$app_dir/$app_name.csproj"
     if [ "$template" = "maui" ] && [ -f "$csproj" ]; then
