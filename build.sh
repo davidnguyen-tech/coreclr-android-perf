@@ -23,7 +23,7 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${POSITIONAL_ARGS[@]}"
 
-resolve_platform_config "$PLATFORM"
+resolve_platform_config "$PLATFORM" || exit 1
 
 if [ ! -f "$LOCAL_DOTNET" ]; then
     echo "Error: $LOCAL_DOTNET does not exist. Please run ./prepare.sh first."

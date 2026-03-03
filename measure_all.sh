@@ -65,8 +65,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Resolve platform-specific configuration
-resolve_platform_config "$PLATFORM"
-PLATFORM_DISPLAY="$(echo "$PLATFORM" | sed 's/./\U&/')"
+resolve_platform_config "$PLATFORM" || exit 1
+PLATFORM_DISPLAY="$(echo "$PLATFORM" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
 
 # Default app list per platform
 case "$PLATFORM" in
