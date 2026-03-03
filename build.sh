@@ -8,7 +8,8 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
 fi
 
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <mono-coreclr> <build-run> <ntimes> [additional_args]"
+    echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     exit 1
 fi
 
@@ -17,8 +18,9 @@ if [[ "$1" != "dotnet-new-android" && "$1" != "dotnet-new-maui" && "$1" != "dotn
     exit 1
 fi
 
-if [[ "$2" != "mono" && "$2" != "coreclr" ]]; then
-    echo "Invalid parameter. Allowed values are: mono, coreclr"
+VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
+if [[ ! " $VALID_CONFIGS " =~ " $2 " ]]; then
+    echo "Invalid build config '$2'. Allowed values are: $VALID_CONFIGS"
     exit 1
 fi
 
@@ -34,13 +36,15 @@ else
 fi
 
 SAMPLE_APP=$1
-RUNTIME=$2
+BUILD_CONFIG=$2
+APP_DIR="$APPS_DIR/$SAMPLE_APP"
 
-if [[ "$RUNTIME" == "mono" ]]; then
-    RUNTIME_SPECIFIC_ARGS="-p:UseMonoRuntime=true"
-elif [[ "$RUNTIME" == "coreclr" ]]; then
-    RUNTIME_SPECIFIC_ARGS="-p:UseMonoRuntime=false"
+if [ ! -d "$APP_DIR" ]; then
+    echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."
+    exit 1
 fi
+
+MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
 
 if [[ -z "$4" || ! "$4" =~ ^[0-9]+$ ]]; then
     echo "Invalid fourth parameter. Please provide a positive integer indicating how many times the build will be repeated."
@@ -50,25 +54,25 @@ fi
 REPEAT_COUNT=$4
 
 if [[ -n "$5" ]]; then
-    RUNTIME_SPECIFIC_ARGS="$RUNTIME_SPECIFIC_ARGS $5"
+    MSBUILD_ARGS="$MSBUILD_ARGS $5"
 fi
 
-echo "Building $SAMPLE_APP with $RUNTIME runtime $REPEAT_COUNT times"
+echo "Building $SAMPLE_APP with config $BUILD_CONFIG $REPEAT_COUNT times"
 
 for ((i=1; i<=REPEAT_COUNT; i++)); do
     echo "Build iteration $i of $REPEAT_COUNT"
-    rm -rf "$SAMPLE_APP/bin"
-    rm -rf "$SAMPLE_APP/obj"
+    rm -rf "${APP_DIR:?}/bin"
+    rm -rf "${APP_DIR:?}/obj"
 
     timestamp=$(date +"%Y%m%d%H%M%S")
-    logfile="$SAMPLE_APP/msbuild_$timestamp.binlog"
-    SAVE_OUTPUT_PATH="$BUILD_DIR/$SAMPLE_APP"_"$timestamp"
+    logfile="$APP_DIR/msbuild_$timestamp.binlog"
+    SAVE_OUTPUT_PATH="$BUILD_DIR/${SAMPLE_APP}_${timestamp}"
 
-    echo "Building $SAMPLE_APP with $RUNTIME runtime via: ${LOCAL_DOTNET} build -c Release -f net10.0-android -r android-arm64 -bl:$logfile "$SAMPLE_APP/$SAMPLE_APP.csproj" $RUNTIME_SPECIFIC_ARGS $RUN_TARGET"
-    ${LOCAL_DOTNET} build -c Release -f net10.0-android -r android-arm64 -bl:$logfile "$SAMPLE_APP/$SAMPLE_APP.csproj" $RUNTIME_SPECIFIC_ARGS $RUN_TARGET
+    echo "Building $SAMPLE_APP with config $BUILD_CONFIG via: ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 -bl:$logfile $APP_DIR/$SAMPLE_APP.csproj $MSBUILD_ARGS $RUN_TARGET"
+    ${LOCAL_DOTNET} build -c Release -f net11.0-android -r android-arm64 -bl:"$logfile" "$APP_DIR/$SAMPLE_APP.csproj" $MSBUILD_ARGS $RUN_TARGET
 
     mkdir -p "$SAVE_OUTPUT_PATH"
-    cp -r "$SAMPLE_APP/bin" "$SAVE_OUTPUT_PATH/"
-    cp -r "$SAMPLE_APP/obj" "$SAVE_OUTPUT_PATH/"
+    cp -r "$APP_DIR/bin" "$SAVE_OUTPUT_PATH/"
+    cp -r "$APP_DIR/obj" "$SAVE_OUTPUT_PATH/"
     cp -r "$logfile" "$SAVE_OUTPUT_PATH/"
 done

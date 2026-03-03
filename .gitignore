@@ -59,6 +59,12 @@ versions.log
 tools/
 packages/
 build/
+apps/
 .DS_Store
 perfdata/
+traces/
+results/
 [Nn]u[Gg]et.config
+profiles/
+profiles-old/
+profiles-new/

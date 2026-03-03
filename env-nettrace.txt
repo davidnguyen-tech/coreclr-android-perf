@@ -1,0 +1,9 @@
+DOTNET_TieredPGO=1
+DOTNET_TieredPGO_InstrumentOnlyHotCode=0
+DOTNET_TC_QuickJitForLoops=1
+DOTNET_TC_CallCountThreshold=10000
+DOTNET_ReadyToRun=0
+DOTNET_JitMinimalJitProfiling=1
+DOTNET_JitProfileCasts=1
+DOTNET_JitDelegateProfiling=0
+DOTNET_MULTILEVEL_LOOKUP=0

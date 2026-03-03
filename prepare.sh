@@ -3,29 +3,53 @@
 source "$(dirname "$0")/init.sh"
 
 # Validate passed parameters
-if [ "$#" -gt 2 ]; then
-    echo "Error: Too many parameters passed."
-    echo "Usage: $0 [-f] [-userollback]"
-    exit 1
-fi
+FORCE=false
+USE_ROLLBACK=false
 
-if [ "$1" != "" ] && [ "$1" != "-f" ]; then
-    echo "Error: Invalid first parameter. Only '-f' is allowed."
-    exit 1
-fi
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f)
+            FORCE=true
+            shift
+            ;;
+        -userollback)
+            USE_ROLLBACK=true
+            shift
+            ;;
+        *)
+            echo "Error: Invalid parameter '$1'."
+            echo "Usage: $0 [-f] [-userollback]"
+            exit 1
+            ;;
+    esac
+done
 
-if [ "$2" != "" ] && [ "$2" != "-userollback" ]; then
-    echo "Error: Invalid second parameter. Only '-userollback' is allowed."
-    exit 1
-fi
-
-# Check if DOTNET_DIR and VERSIONS_LOG exist
-if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$1" != "-f" ]; then
+# Check if environment is already set up
+if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$FORCE" = false ]; then
     echo "The environment is already set up. If you want to reset it, pass the -f parameter to the script."
     echo "Current config:"
     cat "$VERSIONS_LOG"
     exit 0
 fi
+
+# Validate prerequisites
+if ! command -v python3 &> /dev/null; then
+    echo "Error: python3 is required but not found in PATH."
+    exit 1
+fi
+
+# Read SDK version from global.json
+if [ ! -f "$GLOBAL_JSON" ]; then
+    echo "Error: global.json not found at $GLOBAL_JSON"
+    exit 1
+fi
+
+SDK_VERSION=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1]))['sdk']['version'])" "$GLOBAL_JSON" 2>/dev/null)
+if [ -z "$SDK_VERSION" ]; then
+    echo "Error: Failed to read SDK version from global.json"
+    exit 1
+fi
+echo "SDK version from global.json: $SDK_VERSION"
 
 # Create tools directory if it doesn't exist
 mkdir -p "$TOOLS_DIR"
@@ -36,21 +60,33 @@ if [ ! -f "$DOTNET_INSTALL_SCRIPT" ]; then
     chmod +x "$DOTNET_INSTALL_SCRIPT"
 fi
 
-# Resets the env
+# Reset the environment
 rm -rf "$DOTNET_DIR"
 rm -rf "$LOCAL_PACKAGES"
 rm -rf "$BUILD_DIR"
+rm -rf "$APPS_DIR"
 rm -f "$VERSIONS_LOG"
+# Clean tool binaries (keep dotnet-install.sh)
+find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "dotnet-install.sh" -exec rm -f {} \; 2>/dev/null
+find "$TOOLS_DIR" -maxdepth 1 -type d ! -path "$TOOLS_DIR" -exec rm -rf {} \; 2>/dev/null
 
-mkdir "$LOCAL_PACKAGES"
-mkdir "$BUILD_DIR"
+mkdir -p "$LOCAL_PACKAGES"
+mkdir -p "$BUILD_DIR"
 
-# Install the latest SDK build if it doesn't exist
-if [ ! -d "$DOTNET_DIR" ]; then
-    # Do a dry run to get the version and store it in the log
-    VERSION=$("$DOTNET_INSTALL_SCRIPT" -c "10.0.1xx-ub" -q daily -i "$DOTNET_DIR" -DryRun | grep -oE 'version "[^"]+"' | cut -d'"' -f2)
-    echo "dotnet sdk: $VERSION" > $VERSIONS_LOG
-    "$DOTNET_INSTALL_SCRIPT" -c "10.0.1xx-ub" -q daily -i "$DOTNET_DIR"
+# Install the SDK version specified in global.json
+echo "Installing .NET SDK $SDK_VERSION..."
+"$DOTNET_INSTALL_SCRIPT" --version "$SDK_VERSION" -i "$DOTNET_DIR"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install .NET SDK $SDK_VERSION"
+    exit 1
+fi
+echo "dotnet sdk: $SDK_VERSION" > "$VERSIONS_LOG"
+
+# Install .NET 8 runtime (needed by dotnet/performance's Startup parser tool)
+echo "Installing .NET 8 runtime (for dotnet/performance tooling)..."
+"$DOTNET_INSTALL_SCRIPT" --runtime dotnet --channel 8.0 --install-dir "$DOTNET_DIR"
+if [ $? -ne 0 ]; then
+    echo "Warning: Failed to install .NET 8 runtime. Startup result parsing may fail."
 fi
 
 # Download NuGet.config file from dotnet/android repo
@@ -61,28 +97,79 @@ if [ $? -ne 0 ] || [ ! -f "$NUGET_CONFIG" ]; then
 fi
 
 # Setup workload to take the latest manifests
-"$DOTNET_DIR/dotnet" workload config --update-mode manifests
+"$LOCAL_DOTNET" workload config --update-mode manifests
 
-if [ "$2" == "-userollback" ]; then
-    "$DOTNET_DIR/dotnet" workload update --from-rollback-file rollback.json
+if [ "$USE_ROLLBACK" = true ]; then
+    "$LOCAL_DOTNET" workload update --from-rollback-file "$SCRIPT_DIR/rollback.json"
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to apply workload rollback."
+        exit 1
+    fi
 fi
 
-# # Install the Android workload
-"$DOTNET_DIR/dotnet" workload install android maui
+# Install the Android and MAUI workloads
+# Use maui-android (not maui) to avoid pulling in iOS/Mac workloads that may be unavailable
+"$LOCAL_DOTNET" workload install android maui-android
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install workloads."
+    exit 1
+fi
 
-# List installed workloads and print the Manifest version for android workload
-INSTALLED_WORKLOADS=$("$DOTNET_DIR/dotnet" workload --info)
+# Log installed workload info
+INSTALLED_WORKLOADS=$("$LOCAL_DOTNET" workload --info)
 ANDROID_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[android\]")
 if [ -n "$ANDROID_WORKLOAD_INFO" ]; then
     ANDROID_MANIFEST_VERSION=$(echo "$ANDROID_WORKLOAD_INFO" | grep "Manifest Version" | awk '{print $3}')
-    echo "dotnet android workload manifest version: $ANDROID_MANIFEST_VERSION" >> $VERSIONS_LOG
+    echo "dotnet android workload manifest version: $ANDROID_MANIFEST_VERSION" >> "$VERSIONS_LOG"
 else
     echo "android workload not installed"
     echo "Fatal error: Android workload installation failed. Please retry running this script with the -f parameter to reset the environment."
     exit 1
 fi
 
-RID=$("$DOTNET_DIR/dotnet" --info | grep "RID:" | awk '{print $2}')
+# Install xharness CLI tool (required for startup measurements)
+"$LOCAL_DOTNET" tool install Microsoft.DotNet.XHarness.CLI --tool-path "$TOOLS_DIR" --version "11.0.0-prerelease.*" --add-source https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install xharness."
+    exit 1
+fi
+echo "xharness: $("$TOOLS_DIR/xharness" version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
 
-# Build the XAPerfTestRunner project
-"$DOTNET_DIR/dotnet" publish external/XAPerfTestRunner/XAPerfTestRunner.csproj -c Release -r $RID --self-contained true -p:PublishSingleFile=true -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json -o "$BUILD_DIR"
+# Install diagnostic tools (required for .nettrace collection)
+DIAG_FEED="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json"
+"$LOCAL_DOTNET" tool install dotnet-dsrouter --tool-path "$TOOLS_DIR" --version "*" --add-source "$DIAG_FEED"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install dotnet-dsrouter."
+    exit 1
+fi
+"$LOCAL_DOTNET" tool install dotnet-trace --tool-path "$TOOLS_DIR" --version "*" --add-source "$DIAG_FEED"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install dotnet-trace."
+    exit 1
+fi
+echo "dotnet-dsrouter: $("$TOOLS_DIR/dotnet-dsrouter" --version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
+echo "dotnet-trace: $("$TOOLS_DIR/dotnet-trace" --version 2>/dev/null || echo 'installed')" >> "$VERSIONS_LOG"
+
+# Initialize the dotnet/performance submodule
+echo "Initializing dotnet/performance submodule..."
+if [ -f "$SCRIPT_DIR/external/performance/README.md" ]; then
+    echo "Submodule already populated, skipping."
+else
+    git -C "$SCRIPT_DIR" submodule update --init --recursive
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to initialize dotnet/performance submodule."
+        exit 1
+    fi
+fi
+
+# Generate sample apps
+echo "Generating sample apps..."
+"$SCRIPT_DIR/generate-apps.sh"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to generate sample apps."
+    exit 1
+fi
+
+echo ""
+echo "=== Environment setup complete ==="
+cat "$VERSIONS_LOG"

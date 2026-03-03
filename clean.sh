@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source "$(dirname "$0")/init.sh"
+
 if [[ -z "$1" ]]; then
     echo "Usage: $0 <all|dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent>"
     exit 1
@@ -21,9 +23,12 @@ fi
 
 for app in "${APPS[@]}"; do
     echo "Cleaning $app ..."
-    rm -rf "$app/bin"
-    rm -rf "$app/obj"
-    rm -rf "$app/perfdata"
-    rm -f "$app"/*.binlog
-    find ./build/ -type d -name "$app*" -exec rm -rf {} +
+    local_app_dir="$APPS_DIR/$app"
+    if [ -d "$local_app_dir" ]; then
+        rm -rf "${local_app_dir:?}/bin"
+        rm -rf "${local_app_dir:?}/obj"
+        rm -rf "${local_app_dir:?}/perfdata"
+        rm -f "$local_app_dir"/*.binlog
+    fi
+    find "$BUILD_DIR/" -type d -name "${app}*" -exec rm -rf {} + 2>/dev/null
 done
