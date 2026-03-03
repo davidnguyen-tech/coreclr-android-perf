@@ -2,4 +2,6 @@
   <!-- Platform-specific build targets -->
   <Import Project="$(MSBuildThisFileDirectory)/android/build-workarounds.targets"
           Condition="Exists('$(MSBuildThisFileDirectory)/android/build-workarounds.targets')" />
+  <Import Project="$(MSBuildThisFileDirectory)/ios/build-workarounds.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)/ios/build-workarounds.targets')" />
 </Project>

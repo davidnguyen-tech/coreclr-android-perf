@@ -74,7 +74,7 @@ case "$PLATFORM" in
         APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
         ;;
     ios)
-        APPS=()
+        APPS=("dotnet-new-ios" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
         ;;
 esac
 

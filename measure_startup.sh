@@ -112,8 +112,12 @@ if [ -z "$PACKAGE_PATH" ]; then
     exit 1
 fi
 
-# Record package size
-PACKAGE_SIZE_BYTES=$(stat -f%z "$PACKAGE_PATH" 2>/dev/null || stat -c%s "$PACKAGE_PATH" 2>/dev/null)
+# Record package size (iOS .app is a directory; use du for directories)
+if [ -d "$PACKAGE_PATH" ]; then
+    PACKAGE_SIZE_BYTES=$(du -sk "$PACKAGE_PATH" | awk '{print $1 * 1024}')
+else
+    PACKAGE_SIZE_BYTES=$(stat -f%z "$PACKAGE_PATH" 2>/dev/null || stat -c%s "$PACKAGE_PATH" 2>/dev/null)
+fi
 if [ -z "$PACKAGE_SIZE_BYTES" ]; then
     echo "Warning: Could not determine $PLATFORM_PACKAGE_LABEL size for $PACKAGE_PATH"
     PACKAGE_SIZE_MB="unknown"

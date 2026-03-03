@@ -1,0 +1,5 @@
+<Project>
+  <Target Name="GenerateInfo" AfterTargets="Build">
+    <Message Importance="High" Text="[BuildInfo]:TargetFramework=$(TargetFramework);ObjDir=$(IntermediateOutputPath);OutputDir=$(OutputPath)"/>
+  </Target>
+</Project>

@@ -185,6 +185,27 @@ else
     fi
 fi
 
+# Create genericiosstartup scenario if it doesn't exist (not yet upstream)
+IOS_SCENARIO_DIR="$SCRIPT_DIR/external/performance/src/scenarios/genericiosstartup"
+if [ ! -f "$IOS_SCENARIO_DIR/test.py" ]; then
+    echo "Creating genericiosstartup scenario..."
+    mkdir -p "$IOS_SCENARIO_DIR"
+    cat > "$IOS_SCENARIO_DIR/test.py" << 'PYEOF'
+'''
+Generic iOS Startup
+'''
+from shared.runner import TestTraits, Runner
+
+EXENAME = 'GenericIOSStartup'
+
+if __name__ == "__main__":
+    traits = TestTraits(exename=EXENAME,
+                        guiapp='false',
+                        )
+    Runner(traits).run()
+PYEOF
+fi
+
 # Generate sample apps
 echo "Generating sample apps..."
 "$SCRIPT_DIR/generate-apps.sh"
