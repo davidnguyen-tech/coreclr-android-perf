@@ -1,5 +1,5 @@
 <Project>
-  <Target Name="GenerateInfo" AfterTargets="Build" Condition="'$(TargetPlatformIdentifier)' == 'ios'">
+  <Target Name="GenerateInfoIos" AfterTargets="Build" Condition="'$(TargetPlatformIdentifier)' == 'ios'">
     <Message Importance="High" Text="[BuildInfo]:TargetFramework=$(TargetFramework);ObjDir=$(IntermediateOutputPath);OutputDir=$(OutputPath);PackageFilename=$(AssemblyName).app"/>
   </Target>
 </Project>

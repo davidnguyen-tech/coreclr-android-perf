@@ -13,6 +13,7 @@
     <TargetFramework>net11.0-ios</TargetFramework>
     <UseMonoRuntime>True</UseMonoRuntime>
     <RunAOTCompilation>True</RunAOTCompilation>
+    <MtouchProfiledAOT>True</MtouchProfiledAOT>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_BuildConfig)' == 'MONO_JIT'">
     <Configuration>Release</Configuration>

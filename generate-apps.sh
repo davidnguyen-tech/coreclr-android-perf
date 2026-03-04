@@ -80,6 +80,10 @@ generate_app() {
             if [ -n "$maui_tfms" ]; then maui_tfms="$maui_tfms;"; fi
             maui_tfms="${maui_tfms}net11.0-ios"
         fi
+        if [ -z "$maui_tfms" ]; then
+            echo "Error: No platforms selected for MAUI app $app_name. At least one platform must be enabled."
+            exit 1
+        fi
         python3 - "$csproj" "$maui_tfms" << 'TFMEOF'
 import sys, re
 csproj = sys.argv[1]
