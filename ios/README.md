@@ -2,6 +2,31 @@
 
 iOS-specific performance measurement scripts and configurations.
 
+## Prerequisites
+
+- **iPhone** (developer mode enabled) connected via USB, visible via `xcrun devicectl list devices`
+- **Xcode** with command-line tools installed (`xcode-select --install`)
+
+### Passwordless `log collect` (required)
+
+The startup measurement flow (`runner.py`) calls `sudo log collect --device` to capture iOS system logs. By default this blocks waiting for a password, which hangs the measurement scripts.
+
+To allow `log collect` to run without a password prompt:
+
+```bash
+echo '%admin ALL=(ALL) NOPASSWD: /usr/bin/log collect *' | sudo tee /etc/sudoers.d/log-collect
+sudo chmod 440 /etc/sudoers.d/log-collect
+```
+
+Verify with:
+
+```bash
+sudo visudo -cf /etc/sudoers.d/log-collect
+# Expected: /etc/sudoers.d/log-collect: parsed OK
+```
+
+To undo: `sudo rm /etc/sudoers.d/log-collect`
+
 ## Contents
 
 - `build-configs.props` — iOS build configuration presets (MONO_JIT, MONO_AOT, MONO_PAOT, CORECLR_JIT, R2R, R2R_COMP, R2R_COMP_PGO)

@@ -4,10 +4,11 @@ Repository for measuring startup performance, build times, and app sizes of .NET
 
 ## Prerequisites
 
-- **Android device** (developer mode enabled) or emulator, visible via `adb devices -l`
 - **Python 3** (any supported 3.x version)
 - **curl** (for downloading dotnet-install script and NuGet.config)
 - **git** (for submodule initialization)
+- **Android:** device (developer mode enabled) or emulator, visible via `adb devices -l`
+- **iOS:** iPhone (developer mode enabled) connected via USB, Xcode with command-line tools. Requires a passwordless sudoers entry for `log collect` — see [`ios/README.md`](./ios/README.md) for setup instructions
 
 ## Quick Start
 
