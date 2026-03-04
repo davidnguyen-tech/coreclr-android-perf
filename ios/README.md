@@ -29,7 +29,7 @@ To undo: `sudo rm /etc/sudoers.d/log-collect`
 
 ## Contents
 
-- `build-configs.props` — iOS build configuration presets (MONO_JIT, MONO_AOT, MONO_PAOT, CORECLR_JIT, R2R, R2R_COMP, R2R_COMP_PGO)
+- `build-configs.props` — iOS build configuration presets (MONO_JIT, MONO_AOT, MONO_PAOT, CORECLR_JIT, R2R_COMP, R2R_COMP_PGO)
 - `build-workarounds.targets` — iOS build workarounds and info target
 - `print_app_sizes.sh` — iOS app bundle size reporting
 
@@ -41,9 +41,10 @@ To undo: `sudo rm /etc/sudoers.d/log-collect`
 | MONO_AOT | Mono | Full AOT | No |
 | MONO_PAOT | Mono | Profiled AOT | No |
 | CORECLR_JIT | CoreCLR | No | No |
-| R2R | CoreCLR | No | Single-assembly |
 | R2R_COMP | CoreCLR | No | Composite |
 | R2R_COMP_PGO | CoreCLR | No | Composite + PGO |
+
+> **Note:** Non-composite R2R (`R2R`) is not supported on iOS because MachO only supports composite R2R images.
 
 ## Usage
 
@@ -58,7 +59,7 @@ To undo: `sudo rm /etc/sudoers.d/log-collect`
 ./measure_startup.sh dotnet-new-ios MONO_AOT --platform ios
 
 # Build only (no measurement)
-./build.sh --platform ios dotnet-new-ios R2R build 1
+./build.sh --platform ios dotnet-new-ios R2R_COMP build 1
 ```
 
 ## iOS Apps

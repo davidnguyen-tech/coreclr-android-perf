@@ -2,7 +2,9 @@
 
 source "$(dirname "$0")/init.sh"
 
-ALL_CONFIGS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
+ALL_CONFIGS_ANDROID=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
+# Non-composite R2R is not supported on iOS (MachO only supports composite R2R images)
+ALL_CONFIGS_IOS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R_COMP" "R2R_COMP_PGO")
 PLATFORM="android"
 
 ITERATIONS=10
@@ -67,6 +69,12 @@ done
 # Resolve platform-specific configuration
 resolve_platform_config "$PLATFORM" || exit 1
 PLATFORM_DISPLAY="$(echo "$PLATFORM" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+
+# Select platform-specific config list
+case "$PLATFORM" in
+    android) ALL_CONFIGS=("${ALL_CONFIGS_ANDROID[@]}") ;;
+    ios)     ALL_CONFIGS=("${ALL_CONFIGS_IOS[@]}") ;;
+esac
 
 # Default app list per platform
 case "$PLATFORM" in

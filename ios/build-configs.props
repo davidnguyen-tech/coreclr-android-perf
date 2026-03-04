@@ -33,16 +33,7 @@
     <PublishReadyToRun>False</PublishReadyToRun>
     <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R'">
-    <Configuration>Release</Configuration>
-    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
-    <TargetFramework>net11.0-ios</TargetFramework>
-    <UseMonoRuntime>False</UseMonoRuntime>
-    <_IsPublishing>True</_IsPublishing>
-    <PublishReadyToRun>True</PublishReadyToRun>
-    <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
-    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
-  </PropertyGroup>
+  <!-- Non-composite R2R is not supported on iOS (MachO only supports composite R2R images) -->
   <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R_COMP'">
     <Configuration>Release</Configuration>
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>

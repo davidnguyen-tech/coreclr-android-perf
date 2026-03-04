@@ -105,11 +105,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Find the built package (use bin/ path to avoid intermediate obj/ artifacts)
-PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/bin/Release/*" | head -1)
+# Find the built package in the bin/ output directory (not obj/ intermediates)
+PACKAGE_PATH=$(find "$APP_DIR/bin" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" | head -1)
 if [ -z "$PACKAGE_PATH" ]; then
-    # Fallback to any Release path
-    PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" | head -1)
+    # Fallback: search entire app dir but prefer bin/ over obj/
+    PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/bin/Release/*" -not -path "*/obj/*" | head -1)
 fi
 if [ -z "$PACKAGE_PATH" ]; then
     echo "Error: Could not find $PLATFORM_PACKAGE_LABEL package after build."
