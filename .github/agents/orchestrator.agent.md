@@ -106,3 +106,10 @@ When an agent makes a mistake (build failure from wrong MSBuild property, incorr
 3. Keep lessons concise (one line each) and actionable — e.g., `- iOS uses MtouchProfiledAOT, not AndroidEnableProfiledAot, for profiled AOT`
 4. Do NOT bloat agent files — only record mistakes that would realistically recur. Skip one-off typos.
 5. Commit the lesson update alongside the fix so it's never lost
+
+## Lessons
+
+- Commit prefixes must match the agent: `[RESEARCHER]` for research, `[PLANNER]` for plans, `[IMPLEMENTER]` for code, `[ORCHESTRATOR]` for squash merges
+- Multi-model review workflow: 5 reviewers return findings privately (no PR comments), then a final reviewer consolidates into a single PR comment
+- Research and plan files must be committed and pushed immediately after creation
+- Break implementation into small sub-steps — never send implementer to do an entire PR at once

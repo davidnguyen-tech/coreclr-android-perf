@@ -57,3 +57,5 @@ When adding support for a new platform:
 
 ## Lessons
 
+- When adding a platform to script help/usage text, verify the script actually handles that platform in its logic — don't just add it to the usage string
+- Hardcoded device/simulator names (e.g., 'iPhone 16') should use a generic placeholder or auto-detection

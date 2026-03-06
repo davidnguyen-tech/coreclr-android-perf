@@ -76,3 +76,6 @@ If the environment isn't fully set up (no SDK, no workloads), run what you can (
 
 ## Lessons
 
+- Must actually test changes — "couldn't verify because workload wasn't installed" is unacceptable. Follow the defined testing procedure: clean, build, run
+- When reviewing docs, verify every example command against actual script argument parsing
+- Check that help text in scripts matches actual supported platforms/flags
