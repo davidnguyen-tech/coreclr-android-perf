@@ -21,6 +21,9 @@ print_usage() {
     echo ""
     echo "Options:"
     echo "  --platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>      Target platform (default: android)"
+    echo "  --prebuilt                    Measure a pre-built binary (skip build step)"
+    echo "  --package-path <path>         Path to pre-built package (.apk, .app, .ipa)"
+    echo "  --package-name <bundle-id>    Bundle ID override (auto-detected if omitted)"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -39,6 +42,9 @@ shift 2
 
 # Parse options to extract --platform before passing remaining args to test.py
 PLATFORM="android"
+PREBUILT=false
+PREBUILT_PACKAGE_PATH=""
+PREBUILT_PACKAGE_NAME=""
 PASSTHROUGH_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,6 +54,26 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             PLATFORM="$2"
+            shift 2
+            ;;
+        --prebuilt)
+            PREBUILT=true
+            shift
+            ;;
+        --package-path)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --package-path requires a path to the pre-built package"
+                exit 1
+            fi
+            PREBUILT_PACKAGE_PATH="$2"
+            shift 2
+            ;;
+        --package-name)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --package-name requires a bundle ID"
+                exit 1
+            fi
+            PREBUILT_PACKAGE_NAME="$2"
             shift 2
             ;;
         *)
@@ -60,6 +86,11 @@ set -- "${PASSTHROUGH_ARGS[@]}"
 
 # ios-simulator: route to dedicated script — test.py only supports physical iOS devices
 if [[ "$PLATFORM" == "ios-simulator" ]]; then
+    if [ "$PREBUILT" = true ]; then
+        echo "Error: --prebuilt is not supported with ios-simulator."
+        echo "Use ios/measure_simulator_startup.sh with --no-build instead."
+        exit 1
+    fi
     exec "$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$SAMPLE_APP" "$BUILD_CONFIG" "$@"
 fi
 
@@ -78,43 +109,87 @@ if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
     exit 1
 fi
 
-APP_DIR="$APPS_DIR/$SAMPLE_APP"
-if [ ! -d "$APP_DIR" ]; then
-    echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."
-    exit 1
-fi
+if [ "$PREBUILT" = true ]; then
+    # --- Pre-built binary mode ---
+    if [ -z "$PREBUILT_PACKAGE_PATH" ]; then
+        echo "Error: --prebuilt requires --package-path <path>"
+        exit 1
+    fi
+    if [ ! -e "$PREBUILT_PACKAGE_PATH" ]; then
+        echo "Error: Package not found: $PREBUILT_PACKAGE_PATH"
+        exit 1
+    fi
 
-# Build config determines all MSBuild properties (including UseMonoRuntime)
-MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
+    PACKAGE_PATH="$PREBUILT_PACKAGE_PATH"
 
-# Determine package name from the csproj
-PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$APP_DIR/$SAMPLE_APP.csproj" | sed 's/<ApplicationId>//')
-if [ -z "$PACKAGE_NAME" ]; then
-    # Fallback for android template
-    PACKAGE_NAME="com.companyname.$(echo "$SAMPLE_APP" | tr '-' '_')"
-fi
+    # Determine bundle ID: use --package-name if provided, otherwise auto-detect
+    if [ -n "$PREBUILT_PACKAGE_NAME" ]; then
+        PACKAGE_NAME="$PREBUILT_PACKAGE_NAME"
+    else
+        # Auto-detect bundle ID from the package
+        if [[ "$PACKAGE_PATH" == *.app ]]; then
+            PACKAGE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PACKAGE_PATH/Info.plist" 2>/dev/null)
+        elif [[ "$PACKAGE_PATH" == *.apk ]]; then
+            PACKAGE_NAME=$(aapt2 dump badging "$PACKAGE_PATH" 2>/dev/null | grep -o "package: name='[^']*'" | sed "s/package: name='//;s/'//")
+        elif [[ "$PACKAGE_PATH" == *.ipa ]]; then
+            # IPA is a zip archive containing Payload/<app>.app/Info.plist
+            TEMP_PLIST=$(mktemp)
+            unzip -p "$PACKAGE_PATH" "Payload/*/Info.plist" > "$TEMP_PLIST" 2>/dev/null
+            PACKAGE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$TEMP_PLIST" 2>/dev/null)
+            rm -f "$TEMP_PLIST"
+        fi
 
-echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) ==="
+        if [ -z "$PACKAGE_NAME" ]; then
+            echo "Error: Could not auto-detect bundle ID from $PACKAGE_PATH"
+            echo "Use --package-name <bundle-id> to specify it explicitly."
+            exit 1
+        fi
+        echo "Auto-detected bundle ID: $PACKAGE_NAME"
+    fi
 
-# Clean previous build artifacts to avoid stale state between configs
-rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
+    echo "=== Using pre-built package ==="
+    echo "Package: $PACKAGE_PATH"
+    echo "Bundle ID: $PACKAGE_NAME"
+else
+    # --- Standard build mode ---
+    APP_DIR="$APPS_DIR/$SAMPLE_APP"
+    if [ ! -d "$APP_DIR" ]; then
+        echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."
+        exit 1
+    fi
 
-# Build the package
-${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
-    -bl:"$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog" \
-    "$APP_DIR/$SAMPLE_APP.csproj" \
-    $MSBUILD_ARGS
+    # Build config determines all MSBuild properties (including UseMonoRuntime)
+    MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
 
-if [ $? -ne 0 ]; then
-    echo "Error: Build failed."
-    exit 1
-fi
+    # Determine package name from the csproj
+    PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$APP_DIR/$SAMPLE_APP.csproj" | sed 's/<ApplicationId>//')
+    if [ -z "$PACKAGE_NAME" ]; then
+        # Fallback for android template
+        PACKAGE_NAME="com.companyname.$(echo "$SAMPLE_APP" | tr '-' '_')"
+    fi
 
-# Find the built package
-PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" | head -1)
-if [ -z "$PACKAGE_PATH" ]; then
-    echo "Error: Could not find $PLATFORM_PACKAGE_LABEL package after build."
-    exit 1
+    echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) ==="
+
+    # Clean previous build artifacts to avoid stale state between configs
+    rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
+
+    # Build the package
+    ${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
+        -bl:"$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog" \
+        "$APP_DIR/$SAMPLE_APP.csproj" \
+        $MSBUILD_ARGS
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Build failed."
+        exit 1
+    fi
+
+    # Find the built package
+    PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" | head -1)
+    if [ -z "$PACKAGE_PATH" ]; then
+        echo "Error: Could not find $PLATFORM_PACKAGE_LABEL package after build."
+        exit 1
+    fi
 fi
 
 # Record package size
