@@ -25,7 +25,7 @@ Use the `task` tool with `agent_type: "researcher"` to investigate the codebase.
 - Send a comprehensive prompt including the full task description
 - Ask for: repository structure, relevant files, platform patterns, build configurations, and risks
 - If the research has gaps, dispatch additional researcher agents to fill them
-- The researcher will save findings to `research.md`
+- The researcher will save findings to `.github/researches/<topic>.md`
 
 ### Stage 2: Plan
 Use the `task` tool with `agent_type: "planner"` to create a structured implementation plan.

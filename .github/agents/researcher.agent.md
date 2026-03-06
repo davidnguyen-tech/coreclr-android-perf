@@ -40,5 +40,6 @@ Guidelines:
 - Note any inconsistencies, technical debt, or undocumented conventions you discover
 - Do NOT modify existing source files — your role is investigation, not implementation
 - Do NOT create git commits — you are a read-only agent
-- Save your research findings to `research.md` in the repository root
+- Save your research findings to `.github/researches/<topic>.md` (e.g., `.github/researches/ios-platform.md`, `.github/researches/apple-nettrace.md`)
+- Each research topic gets its own file — do NOT combine unrelated topics
 - Organize findings with clear headings: Architecture, Key Files, Patterns, Dependencies, Risks
