@@ -47,7 +47,7 @@ Use the `task` tool with `agent_type: "implementer"` to implement the current st
 #### 3b. Review
 Use the `task` tool with `agent_type: "reviewer"` to review the PR.
 - Pass the PR number to the reviewer
-- The reviewer will read the diff and post review comments directly on the PR
+- The reviewer will check out the branch, run builds and script validation, read the diff, and post review comments on the PR
 - If the reviewer approves: auto-merge the PR using `gh pr merge <number> --squash --delete-branch` into the **`feature/apple-agents`** base branch (NOT `main`), then move to the next step
 - If the reviewer requests changes, run the **full cycle**:
   1. **Researcher** — pass the PR review comments and ask it to research options for fixing the issues
