@@ -219,6 +219,7 @@ cleanup() {
     "$XHARNESS" apple uninstall \
         --app "$BUNDLE_ID" \
         --target ios-device \
+        --device "$DEVICE_ID" \
         --output-directory "$TRACE_DIR" 2>/dev/null || true
 
     # Remove IPC socket file if it exists
@@ -311,6 +312,7 @@ echo "--- Installing app on device ---"
 "$XHARNESS" apple install \
     --app "$APP_BUNDLE" \
     --target ios-device \
+    --device "$DEVICE_ID" \
     --output-directory "$TRACE_DIR"
 
 if [ $? -ne 0 ]; then
