@@ -50,14 +50,27 @@ resolve_platform_config() {
                 PLATFORM_RID="android-arm64"
             fi
             ;;
-        ios)
+        ios|ios-simulator)
             PLATFORM_TFM="net11.0-ios"
-            PLATFORM_RID="ios-arm64"
-            PLATFORM_DEVICE_TYPE="ios"
             PLATFORM_SCENARIO_DIR="$SCENARIOS_DIR/genericiosstartup"
             PLATFORM_PACKAGE_GLOB="*.app"
             PLATFORM_PACKAGE_LABEL="APP"
             PLATFORM_DIR="$IOS_DIR"
+            # RID and device type selection: physical devices are always arm64;
+            # simulators match the host architecture.
+            if [ "$platform" = "ios-simulator" ]; then
+                local arch
+                arch="$(uname -m)"
+                if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
+                    PLATFORM_RID="iossimulator-arm64"
+                else
+                    PLATFORM_RID="iossimulator-x64"
+                fi
+                PLATFORM_DEVICE_TYPE="ios-simulator"
+            else
+                PLATFORM_RID="ios-arm64"
+                PLATFORM_DEVICE_TYPE="ios"
+            fi
             ;;
         osx)
             PLATFORM_TFM="net11.0-macos"
@@ -78,7 +91,7 @@ resolve_platform_config() {
             PLATFORM_DIR="$MACCATALYST_DIR"
             ;;
         *)
-            echo "Error: Unknown platform '$platform'. Supported: android, android-emulator, ios, osx, maccatalyst"
+            echo "Error: Unknown platform '$platform'. Supported: android, android-emulator, ios, ios-simulator, osx, maccatalyst"
             return 1
             ;;
     esac
