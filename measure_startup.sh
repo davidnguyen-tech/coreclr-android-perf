@@ -13,11 +13,6 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-if ! command -v xharness &> /dev/null && [ ! -f "$TOOLS_DIR/xharness" ]; then
-    echo "Error: xharness is required but not found. Run ./prepare.sh to install it."
-    exit 1
-fi
-
 # Usage
 print_usage() {
     echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> [options]"
@@ -66,6 +61,11 @@ set -- "${PASSTHROUGH_ARGS[@]}"
 # ios-simulator: route to dedicated script — test.py only supports physical iOS devices
 if [[ "$PLATFORM" == "ios-simulator" ]]; then
     exec "$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$SAMPLE_APP" "$BUILD_CONFIG" "$@"
+fi
+
+if ! command -v xharness &> /dev/null && [ ! -f "$TOOLS_DIR/xharness" ]; then
+    echo "Error: xharness is required but not found. Run ./prepare.sh to install it."
+    exit 1
 fi
 
 # Resolve platform-specific configuration
