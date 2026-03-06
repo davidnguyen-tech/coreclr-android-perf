@@ -41,6 +41,7 @@ You are an implementation specialist for a .NET CoreCLR performance measurement 
 
 ## Git Workflow
 - For each feature/sub-feature, create a new branch from **`feature/apple-agents`** (NOT `main`)
+- Prefix all commit messages with `[IMPLEMENTER]`
 - Commit your changes to that branch
 - Push the branch and open a **draft** pull request **targeting `feature/apple-agents`** as the base branch
 - The PR description should reference which task from the plan this implements

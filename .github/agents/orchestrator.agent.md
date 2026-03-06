@@ -40,7 +40,7 @@ Iterate through each step/sub-step from the plan:
 #### 3a. Implement
 Use the `task` tool with `agent_type: "implementer"` to implement the current step.
 - Pass the specific step task, full plan context, and research context
-- The implementer will create a feature branch, commit, push, and open a draft PR
+- The implementer will create a feature branch, commit (prefixed with `[IMPLEMENTER]`), push, and open a draft PR
 - After the PR is opened, run builds and tests using `task` tool with `agent_type: "task"` — validate with `./build.sh` or `dotnet build`
 - If builds/tests fail, dispatch another implementer agent to fix and push to the same branch
 
@@ -48,7 +48,7 @@ Use the `task` tool with `agent_type: "implementer"` to implement the current st
 Use the `task` tool with `agent_type: "reviewer"` to review the PR.
 - Pass the PR number to the reviewer
 - The reviewer will check out the branch, run builds and script validation, read the diff, and post review comments on the PR
-- If the reviewer approves: auto-merge the PR using `gh pr merge <number> --squash --delete-branch` into the **`feature/apple-agents`** base branch (NOT `main`), then move to the next step
+- If the reviewer approves: auto-merge the PR using `gh pr merge <number> --squash --delete-branch` into the **`feature/apple-agents`** base branch (NOT `main`), with the squash commit message prefixed by `[ORCHESTRATOR]`. Then move to the next step
 - If the reviewer requests changes, run the **full cycle**:
   1. **Researcher** — pass the PR review comments and ask it to research options for fixing the issues
   2. **Planner** — pass the review comments + new research and ask it to plan the fix approach

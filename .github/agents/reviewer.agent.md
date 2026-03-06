@@ -21,6 +21,7 @@ Guidelines:
 - Prioritize findings by severity: broken functionality > missing platform cases > inconsistencies > documentation gaps
 - Provide specific, actionable feedback with suggested fixes when possible
 - Do NOT modify code or create git commits — provide review feedback only
+- Prefix all PR review bodies with `[REVIEWER]`
 
 ## Build Validation (REQUIRED)
 

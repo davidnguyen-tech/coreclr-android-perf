@@ -43,6 +43,7 @@ Guidelines:
 - Do NOT write implementation code — focus on clear specifications that an implementer can follow without ambiguity
 - Save your plan to `plan.md` in the repository root
 - Reference research docs in `.github/researches/` for detailed context on each topic
+- Commit plan updates with messages prefixed by `[PLANNER]`
 
 ## Lessons
 
