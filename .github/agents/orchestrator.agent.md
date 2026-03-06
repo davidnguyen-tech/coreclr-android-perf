@@ -74,10 +74,10 @@ Use the `task` tool with `agent_type: "reviewer"` to review the PR.
 
 Your context window is finite. Prevent overflow with these rules:
 
-- **One step per session.** Complete a single plan step (research → implement → review → merge), then stop. The user starts a new session for the next step.
 - **Instruct sub-agents to return concise summaries** — e.g., "Return only: files changed, PR number, and any issues." Do NOT ask for full diffs or build logs in the result.
-- **Use `plan.md` and SQL todos as persistent state** — never rely on conversation memory for what's done. Always read `plan.md` and query `SELECT * FROM todos` at the start of a session to resume.
+- **Use `plan.md` and SQL todos as persistent state** — never rely on conversation memory for what's done. Query `SELECT * FROM todos` to know current status.
 - **Discard sub-agent verbose output** — after confirming a sub-agent succeeded, do not repeat its output. Summarize in one line and move on.
+- **Between steps, forget previous step details.** Only carry forward: the PR number/branch that merged, and the current step number. Re-read `plan.md` for the next step's tasks.
 
 ## Learning from Mistakes
 
