@@ -8,7 +8,7 @@ Supports both physical devices and **emulators/simulators** for development and 
 
 - **.NET SDK** — version pinned in [`global.json`](./global.json) (currently `11.0.100-preview.3.26123.103`)
 - **Python 3** (any supported 3.x version)
-- **curl** (for downloading dotnet-install script and NuGet.config)
+- **curl** (for downloading dotnet-install script)
 - **git** (for submodule initialization)
 
 **Platform-specific requirements:**
@@ -27,7 +27,7 @@ Supports both physical devices and **emulators/simulators** for development and 
 **Workloads installed by `prepare.sh`:**
 - Android: `android`, `maui-android`
 - iOS: `ios`, `maui-ios`
-- macOS: `macos`, `maui-macos`
+- macOS: `macos`
 - Mac Catalyst: `maccatalyst`, `maui-maccatalyst`
 
 ## Quick Start
@@ -114,10 +114,12 @@ Configurations are defined per platform in `<platform>/build-configs.props` and 
 | `dotnet-new-android` | `dotnet new android` | ✅ | — | — | — |
 | `dotnet-new-ios` | `dotnet new ios` | — | ✅ | — | — |
 | `dotnet-new-macos` | `dotnet new macos` | — | — | ✅ | — |
-| `dotnet-new-maui` | `dotnet new maui` | ✅ | ✅ | ✅ | ✅ |
-| `dotnet-new-maui-samplecontent` | `dotnet new maui --sample-content` | ✅ | ✅ | ✅ | ✅ |
+| `dotnet-new-maui` | `dotnet new maui` | ✅ | ✅ | ❌ | ✅ |
+| `dotnet-new-maui-samplecontent` | `dotnet new maui --sample-content` | ✅ | ✅ | ❌ | ✅ |
 
 > **Note:** Mac Catalyst has no standalone `dotnet new` template — only MAUI apps are available.
+>
+> **Note:** MAUI targets macOS through **Mac Catalyst** (`--platform maccatalyst`), not native macOS/AppKit (`--platform osx`). The `osx` platform only supports the standalone `dotnet-new-macos` app.
 
 ## SDK Version Pinning
 
@@ -319,7 +321,7 @@ Build artifacts are copied to `./build/` for further inspection (APKs, `.app` bu
 
 - Runs locally on the Mac — no external device needed
 - 6 build configurations (no non-composite R2R)
-- Apps: `dotnet-new-macos`, `dotnet-new-maui`, `dotnet-new-maui-samplecontent`
+- Apps: `dotnet-new-macos`
 - Package format: `*.app` bundle (directory)
 
 ### Mac Catalyst

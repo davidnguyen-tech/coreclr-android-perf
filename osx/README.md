@@ -67,8 +67,8 @@ Apple platforms use the **MachO** binary format, which only supports Composite R
 # Build a standalone macOS app with a specific config
 ./build.sh --platform osx dotnet-new-macos CORECLR_JIT build 1
 
-# Build MAUI app with R2R Composite
-./build.sh --platform osx dotnet-new-maui R2R_COMP build 1
+# Build with R2R Composite
+./build.sh --platform osx dotnet-new-macos R2R_COMP build 1
 ```
 
 ### Measuring Startup
@@ -104,10 +104,11 @@ macOS apps are built as `.app` directory bundles (not single files like Android 
 
 ## App Templates
 
-macOS supports both standalone and MAUI app templates:
+macOS (`osx` platform) supports only the standalone macOS app template:
 
-- **`dotnet new macos`** — standalone macOS (Cocoa) app. Generates the `dotnet-new-macos` sample app.
-- **`dotnet new maui`** — .NET MAUI cross-platform app. Generates `dotnet-new-maui` and `dotnet-new-maui-samplecontent` sample apps. MAUI apps have their `TargetFrameworks` rewritten to include only `net11.0-macos`.
+- **`dotnet new macos`** — standalone macOS (Cocoa/AppKit) app. Generates the `dotnet-new-macos` sample app.
+
+> **Note:** MAUI does not target native macOS/AppKit. To run MAUI apps on a Mac, use `--platform maccatalyst` instead. Mac Catalyst uses the `net11.0-maccatalyst` TFM, not `net11.0-macos`.
 
 ## File Structure
 
