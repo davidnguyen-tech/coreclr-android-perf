@@ -8,4 +8,6 @@
           Condition="Exists('$(MSBuildThisFileDirectory)/android/build-configs.props')" />
   <Import Project="$(MSBuildThisFileDirectory)/ios/build-configs.props"
           Condition="Exists('$(MSBuildThisFileDirectory)/ios/build-configs.props')" />
+  <Import Project="$(MSBuildThisFileDirectory)/osx/build-configs.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)/osx/build-configs.props')" />
 </Project>
