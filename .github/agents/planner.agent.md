@@ -48,3 +48,5 @@ Guidelines:
 
 ## Lessons
 
+> **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.
+

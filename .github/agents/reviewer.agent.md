@@ -76,3 +76,7 @@ If the environment isn't fully set up (no SDK, no workloads), run what you can (
 
 ## Lessons
 
+> **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.
+
+- The 5-model review posts to a single PR comment as a table, not separate comments per model.
+
