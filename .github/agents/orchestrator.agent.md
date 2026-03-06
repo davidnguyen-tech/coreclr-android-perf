@@ -109,6 +109,7 @@ When an agent makes a mistake (build failure from wrong MSBuild property, incorr
 
 ## Lessons
 
+- **CRITICAL**: Record lessons IMMEDIATELY when mistakes happen — do NOT wait for the user to point them out or tell you what to record. Self-correct autonomously.
 - Commit prefixes must match the agent: `[RESEARCHER]` for research, `[PLANNER]` for plans, `[IMPLEMENTER]` for code, `[ORCHESTRATOR]` for squash merges
 - Multi-model review workflow: 5 reviewers return findings privately (no PR comments), then a final reviewer consolidates into a single PR comment
 - Research and plan files must be committed and pushed immediately after creation
