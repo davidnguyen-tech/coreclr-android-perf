@@ -18,7 +18,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, android-emulator, ios, osx, maccatalyst)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, ios-simulator, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -183,7 +183,7 @@ case "$PLATFORM" in
     android|android-emulator)
         generate_app "android" "dotnet-new-android"
         ;;
-    ios)
+    ios|ios-simulator)
         generate_app "ios" "dotnet-new-ios"
         ;;
     osx)
