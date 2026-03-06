@@ -53,3 +53,6 @@ When adding support for a new platform:
 - Verify `generate-apps.sh` handles the new platform in both `--platform` filtering and MAUI TFM injection
 - Ensure `measure_all.sh` has the correct default app list and config list for the new platform
 - Test that `measure_startup.sh` correctly discovers the built package (file vs directory)
+
+## Lessons
+

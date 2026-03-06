@@ -72,3 +72,6 @@ If the environment isn't fully set up (no SDK, no workloads), run what you can (
 - Post review comments using `gh pr review <number> --comment --body "..."`
 - If no issues found, approve with `gh pr review <number> --approve --body "LGTM — no issues found"`
 - If issues found, request changes with `gh pr review <number> --request-changes --body "..."` and list all findings
+
+## Lessons
+

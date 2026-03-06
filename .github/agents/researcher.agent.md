@@ -43,3 +43,6 @@ Guidelines:
 - Save your research findings to `.github/researches/<topic>.md` (e.g., `.github/researches/ios-platform.md`, `.github/researches/apple-nettrace.md`)
 - Each research topic gets its own file — do NOT combine unrelated topics
 - Organize findings with clear headings: Architecture, Key Files, Patterns, Dependencies, Risks
+
+## Lessons
+

@@ -69,3 +69,13 @@ Use the `task` tool with `agent_type: "reviewer"` to review the PR.
   - `✅ Merged PR #<number> — step: <name>`
 - On review failure, print `🔁 Cycle [N]: Looping back through full pipeline to fix [X] issues on PR #<number>...`
 - After all steps are merged, print a final summary of all PRs and changes
+
+## Learning from Mistakes
+
+When an agent makes a mistake (build failure from wrong MSBuild property, incorrect platform assumption, broken script, etc.):
+
+1. **Identify the root cause** — what incorrect assumption or missing knowledge led to the error?
+2. **Append a one-line lesson** to the relevant `.github/agents/<agent>.agent.md` file under a `## Lessons` section at the bottom
+3. Keep lessons concise (one line each) and actionable — e.g., `- iOS uses MtouchProfiledAOT, not AndroidEnableProfiledAot, for profiled AOT`
+4. Do NOT bloat agent files — only record mistakes that would realistically recur. Skip one-off typos.
+5. Commit the lesson update alongside the fix so it's never lost
