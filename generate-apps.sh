@@ -12,6 +12,27 @@ fi
 
 APPS_DIR="$SCRIPT_DIR/apps"
 
+# Parse --platform parameter (default: android for backward compatibility)
+PLATFORM="android"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+resolve_platform_config "$PLATFORM" || exit 1
+
 generate_app() {
     local template=$1
     local app_name=$2
@@ -47,14 +68,15 @@ generate_app() {
         exit 1
     fi
 
-    # For MAUI apps, restrict TargetFrameworks to Android-only (we don't need iOS/Mac)
+    # For MAUI apps, restrict TargetFrameworks to the selected platform only
     local csproj="$app_dir/$app_name.csproj"
     if [ "$template" = "maui" ] && [ -f "$csproj" ]; then
-        python3 - "$csproj" << 'TFMEOF'
+        python3 - "$csproj" "$PLATFORM_TFM" << 'TFMEOF'
 import sys, re
 csproj = sys.argv[1]
+platform_tfm = sys.argv[2]
 content = open(csproj).read()
-# Replace all TargetFrameworks lines with a single Android-only line
+# Replace all TargetFrameworks lines with a single platform-specific line
 content = re.sub(
     r'<TargetFrameworks[^>]*>.*?</TargetFrameworks>\s*\n\s*',
     '',
@@ -64,12 +86,12 @@ content = re.sub(
 # Insert single TargetFrameworks after the opening <PropertyGroup>
 content = content.replace(
     '<PropertyGroup>\n',
-    '<PropertyGroup>\n\t\t<TargetFrameworks>net11.0-android</TargetFrameworks>\n',
+    '<PropertyGroup>\n\t\t<TargetFrameworks>' + platform_tfm + '</TargetFrameworks>\n',
     1
 )
 open(csproj, 'w').write(content)
 TFMEOF
-        echo "Restricted $app_name to Android-only TFM"
+        echo "Restricted $app_name to $PLATFORM_TFM TFM"
     fi
 
     # Apply profiling patches
@@ -98,13 +120,18 @@ patch_app() {
         is_maui="true"
     fi
 
-    python3 - "$csproj" "$is_maui" << 'PYEOF'
+    python3 - "$csproj" "$is_maui" "$PLATFORM" << 'PYEOF'
 import sys
 
 csproj = sys.argv[1]
 is_maui = sys.argv[2] == "true"
+platform = sys.argv[3]
 
-patch = """
+patch = ""
+
+# Android-specific profiling support (AndroidEnvironment items)
+if platform == "android":
+    patch += """
   <!-- Profiling support -->
   <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true'">
     <AndroidEnvironment Include="$(MSBuildThisFileDirectory)../../android/env.txt" />
@@ -149,12 +176,27 @@ PYEOF
     echo "Applied profiling/PGO patches to $csproj"
 }
 
-# Generate all sample apps
-echo "=== Generating sample apps ==="
+# Generate sample apps for the selected platform
+echo "=== Generating sample apps for $PLATFORM ==="
 
-generate_app "android" "dotnet-new-android"
+case "$PLATFORM" in
+    android)
+        generate_app "android" "dotnet-new-android"
+        ;;
+    ios)
+        generate_app "ios" "dotnet-new-ios"
+        ;;
+    osx)
+        generate_app "macos" "dotnet-new-macos"
+        ;;
+    maccatalyst)
+        # No standalone template — MAUI only
+        ;;
+esac
+
+# MAUI apps work for all platforms
 generate_app "maui" "dotnet-new-maui"
 generate_app "maui" "dotnet-new-maui-samplecontent" "--sample-content"
 
-echo "=== Sample app generation complete ==="
+echo "=== Sample app generation complete for $PLATFORM ==="
 echo "Apps generated in: $APPS_DIR"

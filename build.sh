@@ -9,7 +9,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios)"
+                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -35,8 +35,8 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
 fi
 
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: $0 [--platform <android|ios>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
-    echo "  --platform: target platform (default: android)"
+    echo "Usage: $0 [--platform <android|ios|osx|maccatalyst>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "  --platform: target platform (android, ios, osx, maccatalyst) (default: android)"
     echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     exit 1
 fi
