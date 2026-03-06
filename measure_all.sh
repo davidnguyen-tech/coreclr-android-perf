@@ -90,7 +90,7 @@ case "$PLATFORM" in
         APPS=("dotnet-new-macos" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
         ;;
     maccatalyst)
-        APPS=()
+        APPS=("dotnet-new-maui" "dotnet-new-maui-samplecontent")
         ;;
 esac
 
