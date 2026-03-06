@@ -167,9 +167,11 @@ Results are saved to `results/<app>_<config>.trace`.
 # Mac Catalyst: Mono AOT on MAUI app
 ./measure_startup.sh dotnet-new-maui MONO_AOT --platform maccatalyst
 
-# Emulator / Simulator (see Emulator / Simulator Support section below)
+# Android emulator (see Emulator / Simulator Support section below)
 ./measure_startup.sh dotnet-new-android R2R --platform android-emulator
-./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios-simulator
+
+# iOS Simulator — use the dedicated script (measure_startup.sh does not support simulators)
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --startup-iterations 10
 ```
 
 ### Measuring All Configurations
@@ -361,9 +363,10 @@ Physical device platforms (`android`, `ios`) always use `arm64` since modern dev
 ./measure_startup.sh dotnet-new-android CORECLR_JIT --platform android-emulator
 
 # Full workflow: prepare → build → measure on iOS Simulator
+# Note: measure_startup.sh does not support ios-simulator; use the dedicated script
 ./prepare.sh --platform ios-simulator
 ./build.sh --platform ios-simulator dotnet-new-ios CORECLR_JIT build 1
-./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios-simulator
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --startup-iterations 10
 
 # Sweep all configs on emulator/simulator
 ./measure_all.sh --platform android-emulator --startup-iterations 5
@@ -409,7 +412,7 @@ Cleans build artifacts (`bin/`, `obj/`, binlogs) for the specified app or all ap
 ├── ios/                       # iOS-specific files
 │   ├── build-configs.props    #   Build configs (6 configs, composite R2R only)
 │   ├── build-workarounds.targets  #   Build workarounds
-│   ├── collect_nettrace.sh    #   .nettrace trace collection (via dsrouter + USB)
+│   ├── collect_nettrace.sh    #   .nettrace trace collection (device via dsrouter + USB, simulator via direct socket)
 │   ├── measure_simulator_startup.sh  #   Simulator startup measurement (wall-clock)
 │   └── print_app_sizes.sh    #   .app bundle size reporting
 ├── osx/                       # macOS-specific files
