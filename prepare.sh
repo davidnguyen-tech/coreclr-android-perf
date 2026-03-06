@@ -107,13 +107,6 @@ if [ $? -ne 0 ]; then
     echo "Warning: Failed to install .NET 8 runtime. Startup result parsing may fail."
 fi
 
-# Download NuGet.config file from dotnet/android repo
-curl -L -o "$NUGET_CONFIG" https://raw.githubusercontent.com/dotnet/android/main/NuGet.config
-if [ $? -ne 0 ] || [ ! -f "$NUGET_CONFIG" ]; then
-    echo "Error: Failed to download or locate NuGet.config file."
-    exit 1
-fi
-
 # Setup workload to take the latest manifests
 "$LOCAL_DOTNET" workload config --update-mode manifests
 
@@ -131,7 +124,7 @@ case "$PLATFORM" in
                   WORKLOADS="android maui-android" ;;
     ios|ios-simulator)
                   WORKLOADS="ios maui-ios" ;;
-    osx)          WORKLOADS="macos maui-macos" ;;
+    osx)          WORKLOADS="macos" ;;
     maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst" ;;
 esac
 echo "Installing workloads for $PLATFORM: $WORKLOADS"

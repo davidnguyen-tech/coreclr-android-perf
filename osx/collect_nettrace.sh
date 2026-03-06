@@ -30,7 +30,7 @@ print_usage() {
     echo "Collects a .nettrace startup trace for the given (app, build-config) tuple."
     echo "macOS apps run locally — no dsrouter or device bridge is needed."
     echo ""
-    echo "Apps:     dotnet-new-macos, dotnet-new-maui, dotnet-new-maui-samplecontent"
+    echo "Apps:     dotnet-new-macos"
     echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"

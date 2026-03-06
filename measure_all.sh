@@ -87,7 +87,7 @@ case "$PLATFORM" in
         APPS=("dotnet-new-ios" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
         ;;
     osx)
-        APPS=("dotnet-new-macos" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
+        APPS=("dotnet-new-macos")
         ;;
     maccatalyst)
         APPS=("dotnet-new-maui" "dotnet-new-maui-samplecontent")
