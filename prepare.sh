@@ -42,6 +42,27 @@ case "$PLATFORM" in
         ;;
 esac
 
+# Register custom apps from custom-apps/ into apps/
+# This runs unconditionally (even without -f) since it is a cheap copy operation.
+CUSTOM_APPS_DIR="$SCRIPT_DIR/custom-apps"
+if [ -d "$CUSTOM_APPS_DIR" ]; then
+    mkdir -p "$APPS_DIR"
+    REGISTERED=0
+    for app_dir in "$CUSTOM_APPS_DIR"/*/; do
+        [ -d "$app_dir" ] || continue
+        app_name=$(basename "$app_dir")
+        echo "Registering custom app: $app_name"
+        rm -rf "$APPS_DIR/$app_name"
+        cp -r "$app_dir" "$APPS_DIR/$app_name"
+        REGISTERED=$((REGISTERED + 1))
+    done
+    if [ $REGISTERED -gt 0 ]; then
+        echo "Registered $REGISTERED custom app(s)."
+    else
+        echo "No custom apps found in custom-apps/."
+    fi
+fi
+
 # Check if environment is already set up
 if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$FORCE" = false ]; then
     echo "The environment is already set up. If you want to reset it, pass the -f parameter to the script."
@@ -204,24 +225,6 @@ echo "Generating sample apps..."
 if [ $? -ne 0 ]; then
     echo "Error: Failed to generate sample apps."
     exit 1
-fi
-
-# Register custom apps from custom-apps/ into apps/
-CUSTOM_APPS_DIR="$SCRIPT_DIR/custom-apps"
-if [ -d "$CUSTOM_APPS_DIR" ]; then
-    REGISTERED=0
-    for app_dir in "$CUSTOM_APPS_DIR"/*/; do
-        [ -d "$app_dir" ] || continue
-        app_name=$(basename "$app_dir")
-        echo "Registering custom app: $app_name"
-        cp -r "$app_dir" "$APPS_DIR/$app_name"
-        REGISTERED=$((REGISTERED + 1))
-    done
-    if [ $REGISTERED -gt 0 ]; then
-        echo "Registered $REGISTERED custom app(s)."
-    else
-        echo "No custom apps found in custom-apps/."
-    fi
 fi
 
 echo ""

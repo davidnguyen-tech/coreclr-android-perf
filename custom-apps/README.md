@@ -21,13 +21,13 @@ The app will automatically inherit build configurations from the repo's `Directo
 ### Build
 
 ```bash
-./build.sh --platform <platform> --app my-app
+./build.sh --platform <platform> my-app CORECLR_JIT build 1
 ```
 
 ### Measure
 
 ```bash
-./measure_startup.sh --platform <platform> --app my-app
+./measure_startup.sh my-app CORECLR_JIT --platform <platform>
 ```
 
 ## How It Works
