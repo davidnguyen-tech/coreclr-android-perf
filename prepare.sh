@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios)"
+                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Error: Invalid parameter '$1'."
-            echo "Usage: $0 [-f] [-userollback] [--platform android|ios]"
+            echo "Usage: $0 [-f] [-userollback] [--platform android|ios|osx|maccatalyst]"
             exit 1
             ;;
     esac
@@ -35,9 +35,9 @@ done
 
 # Validate platform
 case "$PLATFORM" in
-    android|ios) ;;
+    android|ios|osx|maccatalyst) ;;
     *)
-        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, ios"
+        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, ios, osx, maccatalyst"
         exit 1
         ;;
 esac
@@ -126,11 +126,12 @@ if [ "$USE_ROLLBACK" = true ]; then
 fi
 
 # Install platform-specific workloads
-if [ "$PLATFORM" = "android" ]; then
-    WORKLOADS="android maui-android"
-elif [ "$PLATFORM" = "ios" ]; then
-    WORKLOADS="ios maui-ios"
-fi
+case "$PLATFORM" in
+    android)      WORKLOADS="android maui-android" ;;
+    ios)          WORKLOADS="ios maui-ios" ;;
+    osx)          WORKLOADS="macos maui-macos" ;;
+    maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst" ;;
+esac
 echo "Installing workloads for $PLATFORM: $WORKLOADS"
 "$LOCAL_DOTNET" workload install $WORKLOADS
 if [ $? -ne 0 ]; then
@@ -187,7 +188,7 @@ fi
 
 # Generate sample apps
 echo "Generating sample apps..."
-"$SCRIPT_DIR/generate-apps.sh"
+"$SCRIPT_DIR/generate-apps.sh" --platform "$PLATFORM"
 if [ $? -ne 0 ]; then
     echo "Error: Failed to generate sample apps."
     exit 1

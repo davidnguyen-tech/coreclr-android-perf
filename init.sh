@@ -18,6 +18,8 @@ TRACES_DIR="$SCRIPT_DIR/traces"
 RESULTS_DIR="$SCRIPT_DIR/results"
 ANDROID_DIR="$SCRIPT_DIR/android"
 IOS_DIR="$SCRIPT_DIR/ios"
+OSX_DIR="$SCRIPT_DIR/osx"
+MACCATALYST_DIR="$SCRIPT_DIR/maccatalyst"
 
 # Platform configuration
 # Usage: resolve_platform_config <platform>
@@ -45,8 +47,26 @@ resolve_platform_config() {
             PLATFORM_PACKAGE_LABEL="APP"
             PLATFORM_DIR="$IOS_DIR"
             ;;
+        osx)
+            PLATFORM_TFM="net11.0-macos"
+            PLATFORM_RID="osx-arm64"
+            PLATFORM_DEVICE_TYPE="osx"
+            PLATFORM_SCENARIO_DIR="$SCENARIOS_DIR/genericmacosstartup"
+            PLATFORM_PACKAGE_GLOB="*.app"
+            PLATFORM_PACKAGE_LABEL="APP"
+            PLATFORM_DIR="$OSX_DIR"
+            ;;
+        maccatalyst)
+            PLATFORM_TFM="net11.0-maccatalyst"
+            PLATFORM_RID="maccatalyst-arm64"
+            PLATFORM_DEVICE_TYPE="maccatalyst"
+            PLATFORM_SCENARIO_DIR="$SCENARIOS_DIR/genericmaccatalyststartup"
+            PLATFORM_PACKAGE_GLOB="*.app"
+            PLATFORM_PACKAGE_LABEL="APP"
+            PLATFORM_DIR="$MACCATALYST_DIR"
+            ;;
         *)
-            echo "Error: Unknown platform '$platform'. Supported: android, ios"
+            echo "Error: Unknown platform '$platform'. Supported: android, ios, osx, maccatalyst"
             return 1
             ;;
     esac

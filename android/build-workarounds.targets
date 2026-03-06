@@ -1,5 +1,5 @@
 <Project>
-  <Target Name="GenerateInfo" AfterTargets="Build">
+  <Target Name="GenerateInfoAndroid" AfterTargets="Build" Condition="'$(TargetPlatformIdentifier)' == 'android'">
     <Message Importance="High" Text="[BuildInfo]:TargetFramework=$(TargetFramework);ObjDir=$(IntermediateOutputPath);OutputDir=$(OutputPath);PackageFilename=$(_AndroidPackage)-Signed.$(AndroidPackageFormat)"/>
   </Target>
   <Target Name="_PreventRunningRemoveRegisterAttributeTaskBefore" BeforeTargets="_RemoveRegisterAttribute"

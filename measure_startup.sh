@@ -25,7 +25,7 @@ print_usage() {
     echo "Build configs: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
-    echo "  --platform <android|ios>      Target platform (default: android)"
+    echo "  --platform <android|ios|osx|maccatalyst>      Target platform (default: android)"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios)"
+                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -113,7 +113,14 @@ if [ -z "$PACKAGE_PATH" ]; then
 fi
 
 # Record package size
-PACKAGE_SIZE_BYTES=$(stat -f%z "$PACKAGE_PATH" 2>/dev/null || stat -c%s "$PACKAGE_PATH" 2>/dev/null)
+if [ -d "$PACKAGE_PATH" ]; then
+    # .app bundles are directories — use du for total size
+    PACKAGE_SIZE_KB=$(du -sk "$PACKAGE_PATH" | cut -f1)
+    PACKAGE_SIZE_BYTES=$((PACKAGE_SIZE_KB * 1024))
+else
+    # Single files (APK) — use stat
+    PACKAGE_SIZE_BYTES=$(stat -f%z "$PACKAGE_PATH" 2>/dev/null || stat -c%s "$PACKAGE_PATH" 2>/dev/null)
+fi
 if [ -z "$PACKAGE_SIZE_BYTES" ]; then
     echo "Warning: Could not determine $PLATFORM_PACKAGE_LABEL size for $PACKAGE_PATH"
     PACKAGE_SIZE_MB="unknown"
