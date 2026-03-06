@@ -4,4 +4,6 @@
           Condition="Exists('$(MSBuildThisFileDirectory)/android/build-workarounds.targets')" />
   <Import Project="$(MSBuildThisFileDirectory)/ios/build-workarounds.targets"
           Condition="Exists('$(MSBuildThisFileDirectory)/ios/build-workarounds.targets')" />
+  <Import Project="$(MSBuildThisFileDirectory)/osx/build-workarounds.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)/osx/build-workarounds.targets')" />
 </Project>
