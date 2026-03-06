@@ -70,6 +70,15 @@ Use the `task` tool with `agent_type: "reviewer"` to review the PR.
 - On review failure, print `🔁 Cycle [N]: Looping back through full pipeline to fix [X] issues on PR #<number>...`
 - After all steps are merged, print a final summary of all PRs and changes
 
+## Context Management
+
+Your context window is finite. Prevent overflow with these rules:
+
+- **One step per session.** Complete a single plan step (research → implement → review → merge), then stop. The user starts a new session for the next step.
+- **Instruct sub-agents to return concise summaries** — e.g., "Return only: files changed, PR number, and any issues." Do NOT ask for full diffs or build logs in the result.
+- **Use `plan.md` and SQL todos as persistent state** — never rely on conversation memory for what's done. Always read `plan.md` and query `SELECT * FROM todos` at the start of a session to resume.
+- **Discard sub-agent verbose output** — after confirming a sub-agent succeeded, do not repeat its output. Summarize in one line and move on.
+
 ## Learning from Mistakes
 
 When an agent makes a mistake (build failure from wrong MSBuild property, incorrect platform assumption, broken script, etc.):
