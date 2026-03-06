@@ -82,7 +82,14 @@ fi
 rm -rf "$DOTNET_DIR"
 rm -rf "$LOCAL_PACKAGES"
 rm -rf "$BUILD_DIR"
-rm -rf "$APPS_DIR"
+# Selectively delete only known generated app directories (dotnet-new-*)
+# to preserve any custom apps placed in the apps/ directory.
+if [ -d "$APPS_DIR" ]; then
+    for app in "$APPS_DIR"/dotnet-new-*; do
+        [ -e "$app" ] && rm -rf "$app"
+    done
+fi
+mkdir -p "$APPS_DIR"
 rm -f "$VERSIONS_LOG"
 # Clean tool binaries (keep dotnet-install.sh)
 find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "dotnet-install.sh" -exec rm -f {} \; 2>/dev/null
