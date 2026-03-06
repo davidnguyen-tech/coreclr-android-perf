@@ -397,3 +397,174 @@ Phase C (documentation) — after Phases A and B
 | macOS/maccatalyst startup measurement gap | Low | Known and documented. These platforms support build + nettrace but not startup timing via `measure_startup.sh`. Separate future task. |
 | `measure_all.sh` parsing output format from custom script | Medium | `ios/measure_simulator_startup.sh` must output `Generic Startup | avg | min | max` in the exact same format as `test.py`'s Startup tool. Test this parsing carefully. |
 
+---
+
+## Step 0 — Fix Apple Platform Build Failures (Prerequisite)
+
+These fixes address build infrastructure bugs that block **all Apple platforms** from completing `prepare.sh` and building MAUI apps on macOS. They must be applied before any Apple platform work can proceed end-to-end.
+
+**Research:** [.github/researches/apple-workload-failures.md](.github/researches/apple-workload-failures.md)
+
+**Grouping rationale:** All four fixes are tightly related build infrastructure issues with the same root theme — the repo was originally Android-only and several scripts have Android-specific assumptions that break Apple platforms. A single PR is appropriate because (a) the changes are small and non-overlapping, (b) they share a single validation procedure, and (c) splitting them would leave the repo in a broken intermediate state for Apple.
+
+### Task 0.1 — Stop overwriting NuGet.config in `prepare.sh` (Critical)
+
+**File:** `prepare.sh`, lines 110–115
+
+**Problem:** `prepare.sh` downloads `NuGet.config` from `dotnet/android` main branch, overwriting the repo's committed config. The `dotnet/android` config has Android-specific darc feeds but lacks `dotnet11-transport` and other feeds needed for Apple workload packages (iOS, macOS, maccatalyst). This is why `dotnet workload install ios` fails with "missing NuGet package" errors while Android works fine.
+
+**Change:** Remove the `curl` download block (lines 110–115) entirely. The repo's committed `NuGet.config` already has the correct feeds (`dotnet-public`, `dotnet-eng`, `dotnet11`, `dotnet11-transport`, `dotnet-tools`, plus the Android darc feed).
+
+```bash
+# REMOVE these lines (110-115):
+# Download NuGet.config file from dotnet/android repo
+curl -L -o "$NUGET_CONFIG" https://raw.githubusercontent.com/dotnet/android/main/NuGet.config
+if [ $? -ne 0 ] || [ ! -f "$NUGET_CONFIG" ]; then
+    echo "Error: Failed to download or locate NuGet.config file."
+    exit 1
+fi
+```
+
+**Acceptance criteria:** After `prepare.sh` completes, `NuGet.config` in the repo root is identical to the committed version (not replaced by an Android-specific one).
+
+### Task 0.2 — Fix invalid `maui-macos` workload ID in `prepare.sh` (Critical)
+
+**File:** `prepare.sh`, line 134
+
+**Problem:** For `--platform osx`, the script tries to install workloads `"macos maui-macos"`. The workload `maui-macos` does not exist in any .NET version. MAUI targets macOS through Mac Catalyst (`maui-maccatalyst`), not native macOS (AppKit). Valid MAUI workload IDs are: `maui-android`, `maui-ios`, `maui-maccatalyst`, `maui-tizen`, `maui-windows`.
+
+**Change:** Line 134 — change `"macos maui-macos"` to `"macos"`:
+
+```bash
+# BEFORE:
+osx)          WORKLOADS="macos maui-macos" ;;
+
+# AFTER:
+osx)          WORKLOADS="macos" ;;
+```
+
+**Acceptance criteria:** `./prepare.sh --platform osx` installs only the `macos` workload without errors. No attempt to install a non-existent `maui-macos` workload.
+
+### Task 0.3 — Skip MAUI app generation for `osx` platform (Important)
+
+**Files:** `generate-apps.sh` (lines 197–199), `measure_all.sh` (lines 89–90)
+
+**Problem:** MAUI apps cannot target `net11.0-macos`. MAUI supports macOS only through Mac Catalyst (`net11.0-maccatalyst`). Currently:
+- `generate-apps.sh` generates MAUI apps unconditionally for all platforms (lines 197–199), so `--platform osx` generates MAUI apps that will fail to build with `net11.0-macos` TFM
+- `measure_all.sh` includes `dotnet-new-maui` and `dotnet-new-maui-samplecontent` in the `osx` app list (lines 89–90), so `--platform osx` would attempt to measure apps that can't build
+
+**Changes:**
+
+1. **`generate-apps.sh`** — Wrap the MAUI app generation (lines 197–199) in a platform guard that skips `osx`:
+   ```bash
+   # BEFORE (lines 197-199):
+   # MAUI apps work for all platforms
+   generate_app "maui" "dotnet-new-maui"
+   generate_app "maui" "dotnet-new-maui-samplecontent" "--sample-content"
+
+   # AFTER:
+   # MAUI apps work for all platforms except osx (MAUI targets macOS via maccatalyst, not native macos)
+   if [ "$PLATFORM" != "osx" ]; then
+       generate_app "maui" "dotnet-new-maui"
+       generate_app "maui" "dotnet-new-maui-samplecontent" "--sample-content"
+   else
+       echo "Skipping MAUI apps for osx platform (MAUI targets macOS via maccatalyst, not native macos)"
+   fi
+   ```
+
+2. **`measure_all.sh`** — Remove MAUI apps from the `osx` default app list (lines 89–90):
+   ```bash
+   # BEFORE:
+   osx)
+       APPS=("dotnet-new-macos" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
+       ;;
+
+   # AFTER:
+   osx)
+       APPS=("dotnet-new-macos")
+       ;;
+   ```
+
+**Acceptance criteria:**
+- `./generate-apps.sh --platform osx` generates only `dotnet-new-macos`, skipping MAUI apps with a clear message
+- `./measure_all.sh --platform osx` only attempts to measure `dotnet-new-macos`
+- `./generate-apps.sh --platform ios` still generates MAUI apps (no regression)
+- `./generate-apps.sh --platform maccatalyst` still generates MAUI apps (no regression)
+
+### Task 0.4 — Update `rollback.json` band to preview.3 (Medium)
+
+**File:** `rollback.json`
+
+**Problem:** SDK is `11.0.100-preview.3` (from `global.json`) but `rollback.json` pins all workloads to `11.0.100-preview.1` band. Cross-band rollback can fail because preview.1 manifests may reference packages incompatible with the preview.3 SDK. While rollback is opt-in (`-userollback` flag), it should be kept consistent.
+
+**Change:** Update all band specifiers from `11.0.100-preview.1` to `11.0.100-preview.3`. The version numbers before the `/` may also need updating to match what's published for the preview.3 band — if the exact versions are unknown, add a comment noting that the versions need to be discovered from the preview.3 manifest.
+
+```json
+{
+    "microsoft.net.sdk.android": "36.1.99-preview.3.XXXXX/11.0.100-preview.3",
+    "microsoft.net.sdk.ios": "26.2.XXXXX-net11-p3/11.0.100-preview.3",
+    "microsoft.net.sdk.maccatalyst": "26.2.XXXXX-net11-p3/11.0.100-preview.3",
+    "microsoft.net.sdk.macos": "26.2.XXXXX-net11-p3/11.0.100-preview.3",
+    "microsoft.net.sdk.maui": "11.0.0-preview.3.XXXXX/11.0.100-preview.3",
+    "microsoft.net.sdk.tvos": "26.2.XXXXX-net11-p3/11.0.100-preview.3",
+    "microsoft.net.workload.mono.toolchain.net9": "11.0.100-preview.3.XXXXX/11.0.100-preview.3",
+    "microsoft.net.workload.mono.toolchain.current": "11.0.100-preview.3.XXXXX/11.0.100-preview.3"
+}
+```
+
+**Discovery approach:** After applying Tasks 0.1–0.3, run `./prepare.sh -f --platform ios` (without `-userollback`). Then inspect the installed manifest versions via `.dotnet/dotnet workload --info` to discover the actual versions for preview.3. Update `rollback.json` with those versions.
+
+**Acceptance criteria:** All band specifiers in `rollback.json` use `11.0.100-preview.3`. `./prepare.sh -f --platform ios -userollback` completes without band mismatch errors.
+
+---
+
+### Step 0 — Dependencies
+
+```
+Task 0.1 (NuGet.config) ─┐
+Task 0.2 (workload ID)  ─┼── All independent, can be applied in any order
+Task 0.3 (MAUI/osx skip) ┘
+                           └── Task 0.4 (rollback.json) — depends on 0.1–0.3 for version discovery
+```
+
+### Step 0 — Testing Strategy
+
+**Single validation sequence** (after applying all four fixes):
+
+```bash
+# 1. Verify NuGet.config is not overwritten
+cp NuGet.config NuGet.config.expected
+./prepare.sh -f --platform ios
+diff NuGet.config NuGet.config.expected  # Should show no differences
+
+# 2. Verify all Apple workloads install
+./prepare.sh -f --platform ios           # Should succeed (was: missing NuGet package)
+./prepare.sh -f --platform osx           # Should succeed (was: invalid maui-macos workload)
+./prepare.sh -f --platform maccatalyst   # Should succeed (was: missing NuGet package)
+
+# 3. Verify MAUI apps skipped for osx
+./generate-apps.sh --platform osx        # Should only generate dotnet-new-macos
+ls apps/                                 # Should NOT contain dotnet-new-maui*
+
+# 4. Verify MAUI apps still generated for other platforms
+rm -rf apps/
+./generate-apps.sh --platform ios        # Should generate dotnet-new-ios + MAUI apps
+ls apps/                                 # Should contain dotnet-new-maui, dotnet-new-maui-samplecontent
+
+# 5. Verify Android is not regressed
+./prepare.sh -f --platform android       # Should still work
+./generate-apps.sh --platform android    # Should still generate all apps
+
+# 6. Verify rollback (if updated)
+./prepare.sh -f --platform ios -userollback  # Should succeed with preview.3 bands
+```
+
+### Step 0 — Risks
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| Removing NuGet.config download may break Android if committed config lacks a needed Android feed | Low | The committed `NuGet.config` already has the `darc-pub-dotnet-android-*` feed (line 11). Verify Android still works after the change. |
+| Apple workload packages may not be on `dotnet11-transport` for this specific preview version | Medium | This is Root Cause 4 from the research (preview package availability gap). If packages are missing even with correct feeds, the SDK preview version may need updating. This is a separate issue from the config fix. |
+| `rollback.json` preview.3 versions unknown until workloads are installed | Low | Task 0.4 is ordered last. Run `dotnet workload --info` after Tasks 0.1–0.3 to discover correct versions. If rollback is not urgently needed, mark Task 0.4 as deferred. |
+| Removing MAUI from `osx` reduces test coverage for macOS | Low | MAUI on Mac is only available through `maccatalyst` platform. The `maccatalyst` platform already has MAUI apps in its app list. No coverage is actually lost — it was never possible to build MAUI for native macOS. |
+
