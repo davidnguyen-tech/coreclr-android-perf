@@ -124,8 +124,11 @@ The iOS Simulator is supported as an alternative to physical devices for develop
 # Build
 ./build.sh --platform ios-simulator dotnet-new-ios CORECLR_JIT build 1
 
-# Measure startup
-./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT
+# Measure startup (transparently routes to ios/measure_simulator_startup.sh)
+./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios-simulator
+
+# Or call the dedicated script directly for simulator-specific options
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --simulator-name 'iPhone 16 Pro'
 
 # Sweep all configs
 ./measure_all.sh --platform ios-simulator --startup-iterations 5

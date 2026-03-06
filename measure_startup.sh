@@ -13,11 +13,6 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-if ! command -v xharness &> /dev/null && [ ! -f "$TOOLS_DIR/xharness" ]; then
-    echo "Error: xharness is required but not found. Run ./prepare.sh to install it."
-    exit 1
-fi
-
 # Usage
 print_usage() {
     echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> [options]"
@@ -25,7 +20,7 @@ print_usage() {
     echo "Build configs: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
-    echo "  --platform <android|android-emulator|ios|osx|maccatalyst>      Target platform (default: android)"
+    echo "  --platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>      Target platform (default: android)"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -49,7 +44,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, android-emulator, ios, osx, maccatalyst)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, ios-simulator, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -63,11 +58,13 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${PASSTHROUGH_ARGS[@]}"
 
-# Guard: ios-simulator is not supported by test.py; redirect to the dedicated script
+# ios-simulator: route to dedicated script — test.py only supports physical iOS devices
 if [[ "$PLATFORM" == "ios-simulator" ]]; then
-    echo "Error: --platform ios-simulator is not supported by measure_startup.sh."
-    echo "Use ios/measure_simulator_startup.sh instead. Example:"
-    echo "  ./ios/measure_simulator_startup.sh <app-name> <build-config> [options]"
+    exec "$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$SAMPLE_APP" "$BUILD_CONFIG" "$@"
+fi
+
+if ! command -v xharness &> /dev/null && [ ! -f "$TOOLS_DIR/xharness" ]; then
+    echo "Error: xharness is required but not found. Run ./prepare.sh to install it."
     exit 1
 fi
 
