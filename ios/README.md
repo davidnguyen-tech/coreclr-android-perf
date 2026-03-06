@@ -150,12 +150,14 @@ When no simulator is specified, the script automatically:
 You can also specify a simulator explicitly:
 
 ```bash
-# By name
-./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --simulator-name 'iPhone 16'
+# By name (use a simulator available on your machine; run `xcrun simctl list devices` to see options)
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --simulator-name 'iPhone 16 Pro'
 
 # By UDID
 ./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --simulator-udid <UDID>
 ```
+
+> **Tip:** By default, the script auto-detects a booted simulator (or picks one and boots it). Use `--simulator-name` only when you need to target a specific device model.
 
 ### Simulator `measure_simulator_startup.sh` Options
 
