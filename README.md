@@ -2,6 +2,8 @@
 
 Repository for measuring startup performance, build times, and app sizes of .NET apps across **Android**, **iOS**, **macOS**, and **Mac Catalyst** using the [dotnet/performance](https://github.com/dotnet/performance) tooling.
 
+Supports both physical devices and **emulators/simulators** for development and relative comparison workflows.
+
 ## Prerequisites
 
 - **.NET SDK** — version pinned in [`global.json`](./global.json) (currently `11.0.100-preview.3.26123.103`)
@@ -11,13 +13,14 @@ Repository for measuring startup performance, build times, and app sizes of .NET
 
 **Platform-specific requirements:**
 
-| Requirement | Android | iOS | macOS | Mac Catalyst |
-|---|---|---|---|---|
-| Physical device (USB) | ✅ | ✅ | — | — |
-| Xcode + command-line tools | — | ✅ | ✅ | ✅ |
-| xharness | ✅ | ✅ | — | — |
-| Passwordless `sudo` for `log collect` | — | ✅ | ✅ | ✅ |
-| ADB (`adb devices -l`) | ✅ | — | — | — |
+| Requirement | Android | Android Emulator | iOS | iOS Simulator | macOS | Mac Catalyst |
+|---|---|---|---|---|---|---|
+| Physical device (USB) | ✅ | — | ✅ | — | — | — |
+| Emulator / Simulator | — | ✅ (`adb`) | — | ✅ (`xcrun simctl`) | — | — |
+| Xcode + command-line tools | — | — | ✅ | ✅ | ✅ | ✅ |
+| xharness | ✅ | ✅ | ✅ | — | — | — |
+| Passwordless `sudo` for `log collect` | — | — | ✅ | — | ✅ | ✅ |
+| ADB (`adb devices -l`) | ✅ | ✅ | — | — | — | — |
 
 > **Apple platforms:** Startup measurement uses SpringBoard / system log timestamps. The `log collect` command requires `sudo`, and passwordless `sudo` is recommended to avoid interrupting automated measurement runs.
 
@@ -39,13 +42,17 @@ Repository for measuring startup performance, build times, and app sizes of .NET
 2. Prepare the environment (pick your platform):
 
     ```bash
-    # Android (default)
+    # Android (default — physical device)
     ./prepare.sh
 
-    # Apple platforms
+    # Apple platforms (physical devices)
     ./prepare.sh --platform ios
     ./prepare.sh --platform osx
     ./prepare.sh --platform maccatalyst
+
+    # Emulator / Simulator
+    ./prepare.sh --platform android-emulator
+    ./prepare.sh --platform ios-simulator
     ```
 
     This will:
@@ -136,7 +143,7 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 ```
 
 **Options:**
-- `--platform <android|ios|osx|maccatalyst>` — Target platform (default: `android`)
+- `--platform <android|android-emulator|ios|osx|maccatalyst>` — Target platform (default: `android`)
 - `--startup-iterations N` — Number of startup iterations (default: 10)
 - `--disable-animations` — Disable device animations during measurement
 - `--use-fully-drawn-time` — Use fully drawn time instead of displayed time
@@ -159,6 +166,12 @@ Results are saved to `results/<app>_<config>.trace`.
 
 # Mac Catalyst: Mono AOT on MAUI app
 ./measure_startup.sh dotnet-new-maui MONO_AOT --platform maccatalyst
+
+# Android emulator (see Emulator / Simulator Support section below)
+./measure_startup.sh dotnet-new-android R2R --platform android-emulator
+
+# iOS Simulator — use the dedicated script (measure_startup.sh does not support simulators)
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --startup-iterations 10
 ```
 
 ### Measuring All Configurations
@@ -170,7 +183,7 @@ Results are saved to `results/<app>_<config>.trace`.
 Runs `measure_startup.sh` for all (app, config) combinations and produces a summary table and CSV.
 
 **Options:**
-- `--platform <android|ios|osx|maccatalyst>` — Target platform (default: `android`)
+- `--platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>` — Target platform (default: `android`)
 - `--app <name>` — Measure only this app (can be repeated)
 - `--startup-iterations N` — Iterations per config (default: 10)
 
@@ -289,13 +302,15 @@ Build artifacts are copied to `./build/` for further inspection (APKs, `.app` bu
 
 - Standard setup — all 7 build configurations supported (including non-composite `R2R`)
 - Requires a physical device or emulator visible via `adb devices -l`
+- Use `--platform android` for physical devices, `--platform android-emulator` for emulators (auto-selects correct RID)
 - Apps: `dotnet-new-android`, `dotnet-new-maui`, `dotnet-new-maui-samplecontent`
 - Package format: `*-Signed.apk` (single file)
 
 ### iOS
 
-- Requires a physical iOS device connected via USB
-- Uses `xharness` for device deployment and app management
+- Requires a physical iOS device connected via USB (`--platform ios`) or an iOS Simulator (`--platform ios-simulator`)
+- Uses `xharness` for physical device deployment and app management
+- Simulator uses `xcrun simctl` for deployment and wall-clock startup measurement (see [ios/README.md](./ios/README.md))
 - 6 build configurations (no non-composite R2R)
 - Apps: `dotnet-new-ios`, `dotnet-new-maui`, `dotnet-new-maui-samplecontent`
 - Package format: `*.app` bundle (directory)
@@ -314,6 +329,55 @@ Build artifacts are copied to `./build/` for further inspection (APKs, `.app` bu
 - 6 build configurations (no non-composite R2R)
 - Apps: `dotnet-new-maui`, `dotnet-new-maui-samplecontent`
 - Package format: `*.app` bundle (directory)
+
+## Emulator / Simulator Support
+
+In addition to physical devices, the tooling supports **Android emulators** and **iOS Simulators** via compound `--platform` values. These are useful for development iteration and relative performance comparison when a physical device is unavailable.
+
+> **Important:** Emulator and simulator measurements are suitable for **relative comparison** between build configurations (e.g., comparing CORECLR_JIT vs R2R_COMP), but they do **not** reflect absolute device performance. Always use physical devices for final performance numbers.
+
+### Supported Compound Platforms
+
+| Platform value | Target | RID (Apple Silicon) | RID (Intel) |
+|---|---|---|---|
+| `android` | Physical Android device | `android-arm64` | `android-arm64` |
+| `android-emulator` | Android emulator | `android-arm64` | `android-x64` |
+| `ios` | Physical iOS device | `ios-arm64` | `ios-arm64` |
+| `ios-simulator` | iOS Simulator | `iossimulator-arm64` | `iossimulator-x64` |
+
+### RID Auto-Detection
+
+When using `android-emulator` or `ios-simulator`, the Runtime Identifier (RID) is automatically selected based on your host machine architecture:
+
+- **Apple Silicon** (M1/M2/M3/M4) → `arm64` variants (`android-arm64`, `iossimulator-arm64`)
+- **Intel** → `x64` variants (`android-x64`, `iossimulator-x64`)
+
+Physical device platforms (`android`, `ios`) always use `arm64` since modern devices are exclusively ARM.
+
+### Workflow Examples
+
+```bash
+# Full workflow: prepare → build → measure on Android emulator
+./prepare.sh --platform android-emulator
+./build.sh --platform android-emulator dotnet-new-android CORECLR_JIT build 1
+./measure_startup.sh dotnet-new-android CORECLR_JIT --platform android-emulator
+
+# Full workflow: prepare → build → measure on iOS Simulator
+# Note: measure_startup.sh does not support ios-simulator; use the dedicated script
+./prepare.sh --platform ios-simulator
+./build.sh --platform ios-simulator dotnet-new-ios CORECLR_JIT build 1
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --startup-iterations 10
+
+# Sweep all configs on emulator/simulator
+./measure_all.sh --platform android-emulator --startup-iterations 5
+./measure_all.sh --platform ios-simulator --startup-iterations 5
+```
+
+### How Measurement Works
+
+- **Android emulator**: Uses the same `test.py` measurement harness as physical devices — ADB is transparent to the emulator/device distinction. The emulator must be visible via `adb devices -l`.
+- **iOS Simulator**: Uses a custom measurement script (`ios/measure_simulator_startup.sh`) that measures wall-clock launch time via `xcrun simctl launch`. The `dotnet/performance` `test.py` harness only supports physical iOS devices (it hardcodes `--target ios-device` and `sudo log collect --device`), so the simulator path bypasses it entirely.
+- **Nettrace collection**: iOS Simulator nettrace collection uses a direct Unix-domain diagnostic socket (no `dotnet-dsrouter` needed), following the same pattern as macOS/Mac Catalyst local tracing.
 
 ## Cleaning Builds
 
@@ -348,7 +412,8 @@ Cleans build artifacts (`bin/`, `obj/`, binlogs) for the specified app or all ap
 ├── ios/                       # iOS-specific files
 │   ├── build-configs.props    #   Build configs (6 configs, composite R2R only)
 │   ├── build-workarounds.targets  #   Build workarounds
-│   ├── collect_nettrace.sh    #   .nettrace trace collection (via dsrouter + USB)
+│   ├── collect_nettrace.sh    #   .nettrace trace collection (device via dsrouter + USB, simulator via direct socket)
+│   ├── measure_simulator_startup.sh  #   Simulator startup measurement (wall-clock)
 │   └── print_app_sizes.sh    #   .app bundle size reporting
 ├── osx/                       # macOS-specific files
 │   ├── build-configs.props    #   Build configs (6 configs, composite R2R only)
