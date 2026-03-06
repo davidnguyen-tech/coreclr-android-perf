@@ -32,6 +32,8 @@ The `feature/ios-measurements` branch has partial iOS support that should be inc
 
 ### Worktree & Branch Convention
 
+All branches are created from `feature/apple-agents` (NOT `main`). All PRs target `feature/apple-agents` as the base branch.
+
 | Step | Branch Name | Worktree Path |
 |------|------------|---------------|
 | 1 | `feature/ios-platform-support` | `.worktrees/ios-platform-support` |

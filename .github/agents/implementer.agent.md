@@ -40,10 +40,11 @@ You are an implementation specialist for a .NET mobile performance measurement r
 - Search in `$APP_DIR/bin` first, fall back to broader search excluding `obj/`
 
 ## Git Workflow
-- For each feature/sub-feature, create a new branch from `main` (e.g., `feature/<feature-name>`)
+- For each feature/sub-feature, create a new branch from **`feature/apple-agents`** (NOT `main`)
 - Commit your changes to that branch
-- Push the branch and open a **draft** pull request with a clear title and description
+- Push the branch and open a **draft** pull request **targeting `feature/apple-agents`** as the base branch
 - The PR description should reference which task from the plan this implements
+- NEVER merge to `main` — all work merges into `feature/apple-agents`
 
 ## Cross-Platform Verification
 When adding support for a new platform:
