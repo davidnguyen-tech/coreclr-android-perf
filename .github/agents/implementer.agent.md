@@ -60,4 +60,5 @@ When adding support for a new platform:
 > **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.
 
 - Never push changes to a branch that doesn't match the scope of the PR — if asked to fix a code issue found during a docs PR review, create a separate branch for it.
+- **CRITICAL**: The ONLY co-author trailer allowed in commits is exactly: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. NEVER hallucinate email addresses, NEVER add `Claude <noreply@anthropic.com>`, NEVER add the user's name/email. Only the one exact Copilot trailer above.
 

@@ -1,7 +1,9 @@
 # Task
 
-Add complete CoreCLR performance measurement support for Apple platforms: **iOS**, **Mac Catalyst**, and **macOS (osx)**.
+1. Add complete CoreCLR performance measurement support for Apple platforms: **iOS**, **Mac Catalyst**, and **macOS (osx)**.
+   Priority order: iOS > osx > maccatalyst.
+   Each platform needs: build configuration presets, app generation, workload installation, startup measurement, package size reporting, and documentation. Follow the existing Android platform support as the reference pattern.
 
-Priority order: iOS > osx > maccatalyst.
+2. Add support for **Android emulators** and **iOS simulators**.
 
-Each platform needs: build configuration presets, app generation, workload installation, startup measurement, package size reporting, and documentation. Follow the existing Android platform support as the reference pattern.
+3. Support measuring **custom apps** by users. Either by adding an app to build by adding its source code to the apps/ directory, or just pointing to an already built .apk or .app. Needs further research/planning.

@@ -49,3 +49,5 @@ Guidelines:
 
 > **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.
 
+- **CRITICAL**: The ONLY co-author trailer allowed in commits is exactly: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. NEVER hallucinate email addresses, NEVER add `Claude <noreply@anthropic.com>`, NEVER add the user's name/email. Only the one exact Copilot trailer above.
+
