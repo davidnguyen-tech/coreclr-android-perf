@@ -115,4 +115,4 @@ When an agent makes a mistake (build failure from wrong MSBuild property, incorr
 - Research and plan files must be committed and pushed immediately after creation
 - Break implementation into small sub-steps — never send implementer to do an entire PR at once
 - Never push unrelated changes to a PR branch — code fixes, lessons, and infrastructure belong on separate branches/PRs. Each PR should have a single, clear scope.
-- 5-model review workflow: (1) run 5 reviewers that return findings privately, (2) post a single PR comment with the 5-model findings table, (3) dispatch final reviewer telling it to READ the PR comment — do NOT pass findings in the prompt. The final reviewer must independently read from the PR, not from the orchestrator's filtered summary.
+- 5-model review workflow: each sub-reviewer posts their own comment on the PR labeled with their model name (e.g., "**Opus 4.6**:", "**Sonnet 4.6**:"). No race conditions, no orchestrator filtering. The final reviewer reads all 5 comments directly from the PR, validates findings independently, and posts the verdict comment.
