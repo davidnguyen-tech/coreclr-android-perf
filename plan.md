@@ -7,6 +7,7 @@ Add CoreCLR performance measurement support for **iOS**, **macOS (osx)**, and **
 - All Apple platforms use MachO → only Composite R2R (no non-composite `R2R` config)
 - All produce `.app` bundles (directories) → size via `du -sk`, not `stat`
 - All PRs branch from and merge into `feature/apple-agents` (never `main`)
+- PGO profiles for R2R_COMP_PGO builds come from `dotnet-optimization` CI — see [.github/researches/mibc-profiles.md](.github/researches/mibc-profiles.md)
 
 ## Step 1 — iOS Platform Support
 
@@ -25,6 +26,7 @@ See [.github/researches/ios-platform.md](.github/researches/ios-platform.md) for
 - [ ] Update `generate-apps.sh` — generate `dotnet-new-ios` via `dotnet new ios`, include `net11.0-ios` in MAUI TFMs, make profiling patches platform-aware
 - [ ] Update `prepare.sh` — install `ios maui-ios` workloads when `--platform ios`
 - [ ] Create `ios/README.md` — prerequisites (iPhone, Xcode, sudoers for `log collect`), configs table, usage examples
+- [ ] Fetch iOS MIBC profiles from `dotnet-optimization` CI for R2R_COMP_PGO builds (see [Maestro channel 5172](https://maestro.dot.net/channel/5172/azdo:dnceng:internal:dotnet-optimization/build/latest))
 
 ## Step 2 — macOS (osx) Platform Support
 
@@ -40,6 +42,7 @@ See [.github/researches/osx-platform.md](.github/researches/osx-platform.md) for
 - [ ] Update `generate-apps.sh` — generate `dotnet-new-macos` via `dotnet new macos`
 - [ ] Update `prepare.sh` — install `macos` workloads
 - [ ] Create `osx/README.md`
+- [ ] Fetch macOS MIBC profiles from `dotnet-optimization` CI if available
 
 ## Step 3 — Mac Catalyst Platform Support
 
@@ -55,6 +58,7 @@ See [.github/researches/maccatalyst-platform.md](.github/researches/maccatalyst-
 - [ ] Update `generate-apps.sh` — no standalone template; MAUI apps only with `net11.0-maccatalyst` TFM
 - [ ] Update `prepare.sh` — install `maccatalyst maui-maccatalyst` workloads
 - [ ] Create `maccatalyst/README.md`
+- [ ] Fetch Mac Catalyst MIBC profiles from `dotnet-optimization` CI if available
 
 ## Step 4 — Apple .nettrace Collection
 
