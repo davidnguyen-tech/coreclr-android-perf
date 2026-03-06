@@ -366,11 +366,11 @@ cleanup() {
         rm -f "$IPC_NAME" 2>/dev/null
     else
         # Simulator cleanup
-        # Kill the app process if still running
+        # Kill the app process if still running (APP_PID is the actual app
+        # process spawned by simctl, not a child of this shell)
         if [ -n "$APP_PID" ] && kill -0 "$APP_PID" 2>/dev/null; then
             echo "Stopping app process (PID $APP_PID)..."
-            kill "$APP_PID" 2>/dev/null
-            wait "$APP_PID" 2>/dev/null
+            kill "$APP_PID" 2>/dev/null || true
         fi
 
         # Terminate and uninstall from simulator
@@ -534,19 +534,25 @@ else
 
     # SIMCTL_CHILD_ prefix passes environment variables to the launched process.
     # The app suspends at startup waiting for dotnet-trace to connect.
-    SIMCTL_CHILD_DOTNET_DiagnosticPorts="$DIAG_SOCKET,suspend" \
-        xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID" &
-    APP_PID=$!
+    # Note: `xcrun simctl launch` prints the spawned app PID to stdout (e.g.
+    # "com.example.app: 12345") and then exits immediately — it does NOT stay
+    # alive for the lifetime of the app.  We capture the real app PID from
+    # that output so we can terminate it later.
+    LAUNCH_OUTPUT=$(SIMCTL_CHILD_DOTNET_DiagnosticPorts="$DIAG_SOCKET,suspend" \
+        xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID" 2>&1)
+    LAUNCH_RESULT=$?
 
-    echo "App launched via simctl (PID $APP_PID, suspended, waiting for trace session)"
+    if [ $LAUNCH_RESULT -ne 0 ]; then
+        echo "Error: simctl launch failed (exit code $LAUNCH_RESULT)."
+        echo "$LAUNCH_OUTPUT"
+        exit 1
+    fi
+
+    APP_PID=$(echo "$LAUNCH_OUTPUT" | grep -o '[0-9]*$')
+    echo "App launched via simctl (app PID $APP_PID, suspended, waiting for trace session)"
 
     # Give the app a moment to create the diagnostic socket
     sleep 2
-
-    if ! kill -0 "$APP_PID" 2>/dev/null; then
-        echo "Error: simctl launch exited unexpectedly."
-        exit 1
-    fi
 fi
 
 # ---------------------------------------------------------------------------

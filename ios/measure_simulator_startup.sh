@@ -42,7 +42,7 @@ print_usage() {
     echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
-    echo "  --iterations N           Number of startup iterations (default: 10)"
+    echo "  --startup-iterations N   Number of startup iterations (default: 10)"
     echo "  --simulator-name NAME    Simulator name (e.g. 'iPhone 16')"
     echo "  --simulator-udid UDID    Simulator UDID (overrides --simulator-name)"
     echo "  --no-build               Skip building, use existing .app bundle"
@@ -50,7 +50,7 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  $0 dotnet-new-ios CORECLR_JIT"
-    echo "  $0 dotnet-new-maui MONO_JIT --iterations 5"
+    echo "  $0 dotnet-new-maui MONO_JIT --startup-iterations 5"
     echo "  $0 dotnet-new-ios R2R_COMP --simulator-name 'iPhone 16' --no-build"
     exit 1
 }
@@ -78,13 +78,13 @@ SKIP_BUILD=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --iterations)
+        --startup-iterations)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --iterations requires a numeric value"
+                echo "Error: --startup-iterations requires a numeric value"
                 exit 1
             fi
             if ! [[ "$2" =~ ^[0-9]+$ ]] || [[ "$2" -eq 0 ]]; then
-                echo "Error: --iterations requires a positive integer, got '$2'"
+                echo "Error: --startup-iterations requires a positive integer, got '$2'"
                 exit 1
             fi
             ITERATIONS=$2

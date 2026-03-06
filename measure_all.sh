@@ -135,8 +135,13 @@ for i in "${!CONFIGS[@]}"; do
     echo "[$NUM/$TOTAL] $app | $config"
     echo "----------------------------------------------"
 
-    OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-        --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+    if [ "$PLATFORM_DEVICE_TYPE" = "ios-simulator" ]; then
+        OUTPUT=$("$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$app" "$config" \
+            --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+    else
+        OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
+            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+    fi
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -eq 0 ]; then
