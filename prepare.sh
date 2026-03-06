@@ -139,15 +139,23 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Map platform name to primary workload ID for verification
+case "$PLATFORM" in
+    android)      WORKLOAD_ID="android" ;;
+    ios)          WORKLOAD_ID="ios" ;;
+    osx)          WORKLOAD_ID="macos" ;;
+    maccatalyst)  WORKLOAD_ID="maccatalyst" ;;
+esac
+
 # Log installed workload info
 INSTALLED_WORKLOADS=$("$LOCAL_DOTNET" workload --info)
-PLATFORM_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[$PLATFORM\]")
+PLATFORM_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[$WORKLOAD_ID\]")
 if [ -n "$PLATFORM_WORKLOAD_INFO" ]; then
     PLATFORM_MANIFEST_VERSION=$(echo "$PLATFORM_WORKLOAD_INFO" | grep "Manifest Version" | awk '{print $3}')
-    echo "dotnet $PLATFORM workload manifest version: $PLATFORM_MANIFEST_VERSION" >> "$VERSIONS_LOG"
+    echo "dotnet $WORKLOAD_ID workload manifest version: $PLATFORM_MANIFEST_VERSION" >> "$VERSIONS_LOG"
 else
-    echo "$PLATFORM workload not installed"
-    echo "Fatal error: $PLATFORM workload installation failed. Please retry running this script with the -f parameter to reset the environment."
+    echo "$WORKLOAD_ID workload not installed"
+    echo "Fatal error: $WORKLOAD_ID workload installation failed. Please retry running this script with the -f parameter to reset the environment."
     exit 1
 fi
 
