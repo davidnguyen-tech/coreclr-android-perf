@@ -194,9 +194,11 @@ case "$PLATFORM" in
         ;;
 esac
 
-# MAUI apps work for all platforms
-generate_app "maui" "dotnet-new-maui"
-generate_app "maui" "dotnet-new-maui-samplecontent" "--sample-content"
+# MAUI apps work for all platforms except osx (MAUI requires maccatalyst, not macos)
+if [ "$PLATFORM" != "osx" ]; then
+    generate_app "maui" "dotnet-new-maui"
+    generate_app "maui" "dotnet-new-maui-samplecontent" "--sample-content"
+fi
 
 echo "=== Sample app generation complete for $PLATFORM ==="
 echo "Apps generated in: $APPS_DIR"
