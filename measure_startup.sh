@@ -84,14 +84,21 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${PASSTHROUGH_ARGS[@]}"
 
+# Validate: --package-path without --prebuilt is likely a mistake
+if [ -n "$PREBUILT_PACKAGE_PATH" ] && [ "$PREBUILT" = false ]; then
+    echo "Error: --package-path was provided without --prebuilt."
+    echo "Add --prebuilt to skip the build step and use the provided package."
+    exit 1
+fi
+
 # ios-simulator: route to dedicated script — test.py only supports physical iOS devices
 if [[ "$PLATFORM" == "ios-simulator" ]]; then
+    SIM_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")
     if [ "$PREBUILT" = true ]; then
-        echo "Error: --prebuilt is not supported with ios-simulator."
-        echo "Use ios/measure_simulator_startup.sh with --no-build instead."
-        exit 1
+        SIM_ARGS+=("--package-path" "$PREBUILT_PACKAGE_PATH")
     fi
-    exec "$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$SAMPLE_APP" "$BUILD_CONFIG" "$@"
+    # Forward any passthrough args (e.g. --startup-iterations)
+    exec "$SCRIPT_DIR/ios/measure_simulator_startup.sh" "${SIM_ARGS[@]}" "$@"
 fi
 
 if ! command -v xharness &> /dev/null && [ ! -f "$TOOLS_DIR/xharness" ]; then

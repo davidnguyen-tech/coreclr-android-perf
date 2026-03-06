@@ -161,9 +161,9 @@ if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
     exit 1
 fi
 
-# Validate app directory
+# Validate app directory (only needed when not using --package-path)
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
-if [ ! -d "$APP_DIR" ]; then
+if [ -z "$PACKAGE_PATH" ] && [ ! -d "$APP_DIR" ]; then
     echo "Error: App directory $APP_DIR does not exist."
     echo "Run ./generate-apps.sh --platform ios-simulator first."
     exit 1
