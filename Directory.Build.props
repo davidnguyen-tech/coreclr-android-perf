@@ -10,4 +10,6 @@
           Condition="Exists('$(MSBuildThisFileDirectory)/ios/build-configs.props')" />
   <Import Project="$(MSBuildThisFileDirectory)/osx/build-configs.props"
           Condition="Exists('$(MSBuildThisFileDirectory)/osx/build-configs.props')" />
+  <Import Project="$(MSBuildThisFileDirectory)/maccatalyst/build-configs.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)/maccatalyst/build-configs.props')" />
 </Project>
