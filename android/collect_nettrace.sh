@@ -45,6 +45,7 @@ print_usage() {
     echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
+    echo "  --platform <android|android-emulator>  Target platform (default: android)"
     echo "  --duration N             Trace duration in seconds (default: 60)"
     echo "  --force                  Re-collect even if trace already exists"
     echo "  --pgo-instrumentation    Include PGO instrumentation env vars for higher-quality traces"
@@ -64,12 +65,21 @@ SAMPLE_APP=$1
 BUILD_CONFIG=$2
 shift 2
 
+PLATFORM="android"
 DURATION=60
 FORCE=false
 PGO_INSTRUMENTATION=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --platform)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, android-emulator)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
         --duration)
             if [[ -z "$2" || "$2" == --* ]]; then
                 echo "Error: --duration requires a numeric value"
@@ -96,6 +106,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Resolve platform-specific configuration
+resolve_platform_config "$PLATFORM" || exit 1
 
 # Validate app name
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
@@ -208,7 +221,7 @@ adb logcat -c
 echo ""
 echo "--- Building and deploying app with diagnostics enabled ---"
 ${LOCAL_DOTNET} build -t:Run -c Release \
-    -f net11.0-android -r android-arm64 \
+    -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
     -tl:off \
     -bl:"$TRACE_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_nettrace.binlog" \
     "$APP_DIR/$SAMPLE_APP.csproj" \

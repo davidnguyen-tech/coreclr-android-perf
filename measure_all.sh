@@ -14,7 +14,7 @@ print_usage() {
     echo "Runs startup measurements for all (app, config) combinations."
     echo ""
     echo "Options:"
-    echo "  --platform <name>          Target platform: android, ios, osx, maccatalyst (default: android)"
+    echo "  --platform <name>          Target platform: android, android-emulator, ios, osx, maccatalyst (default: android)"
     echo "  --app <name>               Measure only this app (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
     echo "  --help                     Show this help message"
@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -70,7 +70,7 @@ PLATFORM_DISPLAY="$(echo "$PLATFORM" | awk '{print toupper(substr($0,1,1)) subst
 # Platform-specific build config lists
 # Apple platforms (MachO) only support Composite R2R — no non-composite R2R config
 case "$PLATFORM" in
-    android)
+    android|android-emulator)
         ALL_CONFIGS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
         ;;
     ios|osx|maccatalyst)
@@ -80,7 +80,7 @@ esac
 
 # Default app list per platform
 case "$PLATFORM" in
-    android)
+    android|android-emulator)
         APPS=("dotnet-new-android" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
         ;;
     ios)

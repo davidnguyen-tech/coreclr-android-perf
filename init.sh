@@ -29,14 +29,26 @@ resolve_platform_config() {
     local platform="${1:-android}"
 
     case "$platform" in
-        android)
+        android|android-emulator)
             PLATFORM_TFM="net11.0-android"
-            PLATFORM_RID="android-arm64"
             PLATFORM_DEVICE_TYPE="android"
             PLATFORM_SCENARIO_DIR="$SCENARIOS_DIR/genericandroidstartup"
             PLATFORM_PACKAGE_GLOB="*-Signed.apk"
             PLATFORM_PACKAGE_LABEL="APK"
             PLATFORM_DIR="$ANDROID_DIR"
+            # RID selection: physical devices are always arm64;
+            # emulators match the host architecture.
+            if [ "$platform" = "android-emulator" ]; then
+                local arch
+                arch="$(uname -m)"
+                if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
+                    PLATFORM_RID="android-arm64"
+                else
+                    PLATFORM_RID="android-x64"
+                fi
+            else
+                PLATFORM_RID="android-arm64"
+            fi
             ;;
         ios)
             PLATFORM_TFM="net11.0-ios"
@@ -66,7 +78,7 @@ resolve_platform_config() {
             PLATFORM_DIR="$MACCATALYST_DIR"
             ;;
         *)
-            echo "Error: Unknown platform '$platform'. Supported: android, ios, osx, maccatalyst"
+            echo "Error: Unknown platform '$platform'. Supported: android, android-emulator, ios, osx, maccatalyst"
             return 1
             ;;
     esac
