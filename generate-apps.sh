@@ -18,7 +18,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -130,7 +130,7 @@ platform = sys.argv[3]
 patch = ""
 
 # Android-specific profiling support (AndroidEnvironment items)
-if platform == "android":
+if platform in ("android", "android-emulator"):
     patch += """
   <!-- Profiling support -->
   <ItemGroup Condition="'$(AndroidEnableProfiler)'=='true'">
@@ -180,7 +180,7 @@ PYEOF
 echo "=== Generating sample apps for $PLATFORM ==="
 
 case "$PLATFORM" in
-    android)
+    android|android-emulator)
         generate_app "android" "dotnet-new-android"
         ;;
     ios)

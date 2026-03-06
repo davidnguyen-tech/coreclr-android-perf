@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios, osx, maccatalyst)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Error: Invalid parameter '$1'."
-            echo "Usage: $0 [-f] [-userollback] [--platform android|ios|osx|maccatalyst]"
+            echo "Usage: $0 [-f] [-userollback] [--platform android|android-emulator|ios|osx|maccatalyst]"
             exit 1
             ;;
     esac
@@ -35,9 +35,9 @@ done
 
 # Validate platform
 case "$PLATFORM" in
-    android|ios|osx|maccatalyst) ;;
+    android|android-emulator|ios|osx|maccatalyst) ;;
     *)
-        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, ios, osx, maccatalyst"
+        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, android-emulator, ios, osx, maccatalyst"
         exit 1
         ;;
 esac
@@ -127,7 +127,8 @@ fi
 
 # Install platform-specific workloads
 case "$PLATFORM" in
-    android)      WORKLOADS="android maui-android" ;;
+    android|android-emulator)
+                  WORKLOADS="android maui-android" ;;
     ios)          WORKLOADS="ios maui-ios" ;;
     osx)          WORKLOADS="macos maui-macos" ;;
     maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst" ;;
@@ -141,7 +142,8 @@ fi
 
 # Map platform name to primary workload ID for verification
 case "$PLATFORM" in
-    android)      WORKLOAD_ID="android" ;;
+    android|android-emulator)
+                  WORKLOAD_ID="android" ;;
     ios)          WORKLOAD_ID="ios" ;;
     osx)          WORKLOAD_ID="macos" ;;
     maccatalyst)  WORKLOAD_ID="maccatalyst" ;;
