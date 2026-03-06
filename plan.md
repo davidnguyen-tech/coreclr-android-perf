@@ -568,3 +568,338 @@ ls apps/                                 # Should contain dotnet-new-maui, dotne
 | `rollback.json` preview.3 versions unknown until workloads are installed | Low | Task 0.4 is ordered last. Run `dotnet workload --info` after Tasks 0.1–0.3 to discover correct versions. If rollback is not urgently needed, mark Task 0.4 as deferred. |
 | Removing MAUI from `osx` reduces test coverage for macOS | Low | MAUI on Mac is only available through `maccatalyst` platform. The `maccatalyst` platform already has MAUI apps in its app list. No coverage is actually lost — it was never possible to build MAUI for native macOS. |
 
+---
+
+## Task 3 — Custom App Measurement Support
+
+See [.github/researches/custom-app-measurement.md](.github/researches/custom-app-measurement.md) for full research, including architecture analysis, design options, and risk assessment.
+
+**Goal:** Enable users to measure startup performance of their own apps — either from source code or from pre-built binaries (`.apk`/`.app`). This complements the existing generated template apps (`dotnet-new-android`, `dotnet-new-ios`, etc.) with user-provided apps for real-world performance analysis.
+
+**Key insight from research:** The pipeline already supports arbitrary app names in `apps/` — `build.sh`, `measure_startup.sh`, and `measure_all.sh --app <name>` all work with any app that follows the `apps/<name>/<name>.csproj` convention. The main gaps are:
+1. `prepare.sh -f` destroys the entire `apps/` directory, deleting any custom app source
+2. No way to measure a pre-built binary without going through the build stage
+3. No documentation of the custom app workflow
+
+**Design decisions:**
+- **Source-based:** Use a git-tracked `custom-apps/` directory for custom app source. Apps are copied into `apps/` after generation, surviving `prepare.sh -f` resets. This is Option A1 from the research — cleanest separation with no risk of data loss.
+- **Pre-built:** Add `--prebuilt --package-path <path>` flags to `measure_startup.sh` to skip the build stage and measure an existing binary directly. This is Option B1 from the research — minimal change, maximum flexibility.
+- **No `measure_all.sh` integration for pre-built:** Pre-built binaries are a single config — the "sweep all configs" model doesn't apply. Users use `measure_startup.sh` directly.
+
+### Step 3.1 — Protect custom apps from `prepare.sh -f` wipe
+
+**Problem:** `prepare.sh` line 85 runs `rm -rf "$APPS_DIR"`, destroying everything in `apps/` including user-placed custom apps. This is the **critical blocker** for source-based custom app support.
+
+**Approach:** Change `prepare.sh` to selectively delete only known generated app directories instead of wiping the entire `apps/` directory. The known generated apps are deterministic — they come from `generate-apps.sh` template+name mappings.
+
+- [ ] **3.1.1** Replace `rm -rf "$APPS_DIR"` (line 85) with selective deletion of known generated apps:
+  ```bash
+  # Instead of: rm -rf "$APPS_DIR"
+  # Delete only known generated app directories
+  GENERATED_APPS=("dotnet-new-android" "dotnet-new-ios" "dotnet-new-macos" "dotnet-new-maui" "dotnet-new-maui-samplecontent")
+  for app in "${GENERATED_APPS[@]}"; do
+      rm -rf "${APPS_DIR:?}/$app"
+  done
+  ```
+  Keep the `GENERATED_APPS` list in sync with the app names used in `generate-apps.sh` (lines 184, 187, 189, 199–200). Add a comment noting this coupling.
+
+- [ ] **3.1.2** Ensure `apps/` directory is created if it doesn't exist (it currently gets created by `generate-apps.sh`, but with selective deletion the directory might already exist with custom apps):
+  ```bash
+  mkdir -p "$APPS_DIR"
+  ```
+  Add this after the selective deletion block, before calling `generate-apps.sh`.
+
+**Files:** `prepare.sh`
+**Acceptance criteria:**
+- `prepare.sh -f --platform ios` does NOT delete a manually-placed `apps/my-custom-app/` directory
+- `prepare.sh -f --platform ios` still removes `apps/dotnet-new-ios/`, `apps/dotnet-new-maui/`, etc. before regenerating
+- `generate-apps.sh` still works correctly after `prepare.sh -f` (apps are regenerated from scratch)
+
+---
+
+### Step 3.2 — Create `custom-apps/` directory with registration
+
+**Goal:** Provide a git-tracked directory where users can version-control their custom app source code. A registration step copies these into `apps/` so the existing build/measure pipeline works unchanged.
+
+- [ ] **3.2.1** Create `custom-apps/` directory structure:
+  ```
+  custom-apps/
+  └── README.md           ← Conventions, naming rules, platform requirements
+  ```
+  The `README.md` should document:
+  - Directory naming: `custom-apps/<app-name>/<app-name>.csproj` (must match)
+  - The csproj must include the target platform's TFM in `<TargetFrameworks>` (e.g., `net11.0-ios`)
+  - App name must not start with `Microsoft.`, `System.`, `Mono.`, `Xamarin.` (assembly name collision guard)
+  - `Directory.Build.props/targets` from the repo root will automatically apply — this is expected and provides `_BuildConfig` support
+  - PGO/R2R_COMP_PGO: Custom apps need a `profiles/` subdirectory with `.mibc` files, or should skip the `R2R_COMP_PGO` config
+  - NuGet dependencies: The repo's `NuGet.config` has limited feeds (no nuget.org). Custom apps with external NuGet packages may need the user to add feeds to `NuGet.config`
+
+- [ ] **3.2.2** Add `.gitkeep` or the `README.md` to `custom-apps/` so the directory is tracked in git. Do NOT add `custom-apps/` to `.gitignore`.
+
+- [ ] **3.2.3** Add a registration step to `prepare.sh` that copies custom apps into `apps/` after `generate-apps.sh` completes:
+  ```bash
+  # Register custom apps (after generate-apps.sh)
+  CUSTOM_APPS_DIR="$SCRIPT_DIR/custom-apps"
+  if [ -d "$CUSTOM_APPS_DIR" ]; then
+      for custom_app in "$CUSTOM_APPS_DIR"/*/; do
+          [ -d "$custom_app" ] || continue
+          app_name=$(basename "$custom_app")
+          # Skip README and non-app directories
+          [ -f "$custom_app/$app_name.csproj" ] || continue
+          target="$APPS_DIR/$app_name"
+          if [ -d "$target" ]; then
+              echo "Custom app '$app_name' already exists in apps/, skipping copy."
+          else
+              echo "Registering custom app: $app_name"
+              cp -r "$custom_app" "$target"
+          fi
+      done
+  fi
+  ```
+  Place this after the `generate-apps.sh` call (line 196–200) and before the "Environment setup complete" message.
+
+- [ ] **3.2.4** Validate the csproj naming convention during registration. If `custom-apps/<name>/` exists but `<name>.csproj` is missing, print a warning:
+  ```
+  Warning: custom-apps/<name>/ does not contain <name>.csproj — skipping. Expected: custom-apps/<name>/<name>.csproj
+  ```
+
+**Files:** `custom-apps/README.md` (new), `prepare.sh`
+**Acceptance criteria:**
+- A user places `custom-apps/my-app/my-app.csproj` and runs `prepare.sh -f --platform ios` → `apps/my-app/` exists after completion
+- A directory `custom-apps/notes/` with no csproj is ignored with a warning
+- `custom-apps/README.md` explains the conventions clearly
+- Custom apps survive `prepare.sh -f` (they're re-copied from `custom-apps/` into `apps/`)
+
+---
+
+### Step 3.3 — Pre-built binary measurement in `measure_startup.sh`
+
+**Goal:** Allow users to measure startup of a pre-built `.apk` or `.app` without building from source. This addresses the use case where the binary was built externally (CI pipeline, different machine, third-party app).
+
+- [ ] **3.3.1** Add `--prebuilt`, `--package-path <path>`, and `--package-name <name>` flags to `measure_startup.sh`:
+  - `--prebuilt` — Skip the build stage entirely. Requires `--package-path`.
+  - `--package-path <path>` — Path to the `.apk` file or `.app` bundle directory. Implies `--prebuilt`.
+  - `--package-name <name>` — Package name (Android) or bundle ID (iOS/macOS). Optional — auto-extracted if omitted (see 3.3.2).
+  - When `--prebuilt` is set:
+    - Skip the build stage (lines 97–111)
+    - Skip csproj-based package name lookup (lines 91–95)
+    - Use `--package-path` directly instead of the `find` glob (line 114)
+    - Still compute package size (lines 120–134 — this logic already handles both files and directories)
+    - Still run the `test.py` measurement (lines 158–162)
+    - Use a synthetic `RESULT_NAME` like `prebuilt_<basename>_<timestamp>` instead of `${SAMPLE_APP}_${BUILD_CONFIG}`
+  - When `--prebuilt` is set, the positional `<app-name>` and `<build-config>` arguments become optional (not needed since we're not building). Adjust the argument parsing to handle this.
+
+- [ ] **3.3.2** Auto-extract bundle ID / package name when `--package-name` is not provided:
+  - **iOS/macOS (.app bundles):** Use PlistBuddy to read `CFBundleIdentifier`:
+    ```bash
+    PACKAGE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PACKAGE_PATH/Info.plist" 2>/dev/null)
+    ```
+    This pattern already exists in `ios/measure_simulator_startup.sh` lines 308–321.
+  - **Android (.apk files):** Use `aapt2` from the Android SDK:
+    ```bash
+    PACKAGE_NAME=$(aapt2 dump badging "$PACKAGE_PATH" 2>/dev/null | grep "^package:" | sed "s/.*name='\([^']*\)'.*/\1/")
+    ```
+    If `aapt2` is not available, fall back to requiring `--package-name`.
+  - If auto-extraction fails and `--package-name` was not provided, error with a clear message explaining how to provide it.
+
+- [ ] **3.3.3** Validate the pre-built binary exists and is the expected type:
+  - If `--platform` is `android*` and `--package-path` doesn't end in `.apk`, warn (but don't fail — could be a different extension)
+  - If `--platform` is `ios*|osx|maccatalyst` and `--package-path` isn't a directory ending in `.app`, warn
+  - If the path doesn't exist, error immediately
+
+- [ ] **3.3.4** Update `print_usage()` in `measure_startup.sh` to document the new flags with examples:
+  ```
+  Pre-built measurement:
+    --prebuilt                   Skip build, measure existing binary
+    --package-path <path>        Path to .apk or .app bundle (implies --prebuilt)
+    --package-name <name>        Package name / bundle ID (auto-detected if omitted)
+
+  Examples:
+    $0 --prebuilt --package-path ~/builds/MyApp-Signed.apk --platform android
+    $0 --prebuilt --package-path ~/builds/MyApp.app --platform ios
+  ```
+
+**Files:** `measure_startup.sh`
+**Acceptance criteria:**
+- `./measure_startup.sh --prebuilt --package-path /path/to/app.apk --platform android` measures startup without building
+- `./measure_startup.sh --prebuilt --package-path /path/to/App.app --platform ios` measures startup, auto-extracting bundle ID from Info.plist
+- `./measure_startup.sh --prebuilt --package-path /path/to/app.apk --package-name com.example.app --platform android` uses the provided package name
+- Missing `--package-path` with `--prebuilt` produces a clear error
+- Missing `--package-name` with `--prebuilt` for Android where `aapt2` isn't available produces a clear error explaining the flag
+
+---
+
+### Step 3.4 — Pre-built binary measurement in `ios/measure_simulator_startup.sh`
+
+**Goal:** Extend the existing `--no-build` flag in `ios/measure_simulator_startup.sh` to support external package paths, enabling pre-built app measurement on the iOS simulator.
+
+The script already has `--no-build` (line 109–112) which skips the build stage but still expects the `.app` bundle to be in the standard `$APP_DIR/bin/` location. We need to add `--package-path` to specify an external bundle location.
+
+- [ ] **3.4.1** Add `--package-path <path>` flag to `ios/measure_simulator_startup.sh`:
+  - When provided with `--no-build`, use this path directly instead of the `find` glob (lines 287–295)
+  - Validate the path exists and is a directory ending in `.app`
+  - Bundle ID extraction (lines 308–321) already reads from the `.app/Info.plist` — this works regardless of where the bundle is located
+
+- [ ] **3.4.2** Make positional `<app-name>` and `<build-config>` arguments optional when `--no-build --package-path` is used:
+  - The app name can be derived from the bundle path basename (e.g., `MyApp.app` → `MyApp`)
+  - The build config can default to `PREBUILT` for result file naming
+  - Adjust the argument validation at lines 61–68 to allow this
+
+- [ ] **3.4.3** Update `print_usage()` to document the `--package-path` flag with pre-built examples:
+  ```
+  Examples:
+    $0 --no-build --package-path ~/builds/MyApp.app
+    $0 --no-build --package-path ~/builds/MyApp.app --simulator-name 'iPhone 16'
+  ```
+
+**Files:** `ios/measure_simulator_startup.sh`
+**Acceptance criteria:**
+- `ios/measure_simulator_startup.sh --no-build --package-path /path/to/MyApp.app` installs and measures the pre-built app on a booted simulator
+- Bundle ID is auto-extracted from `Info.plist` within the provided `.app` bundle
+- Results are saved with a meaningful filename (e.g., `MyApp_PREBUILT_simulator.csv`)
+
+---
+
+### Step 3.5 — Example custom app and end-to-end documentation
+
+**Goal:** Provide a minimal working example in `custom-apps/` and comprehensive documentation covering both source-based and pre-built workflows.
+
+- [ ] **3.5.1** Create a minimal example custom app in `custom-apps/`:
+  ```
+  custom-apps/
+  ├── README.md             ← (from Step 3.2)
+  └── hello-custom/
+      └── hello-custom.csproj
+  ```
+  The example should be:
+  - A minimal iOS app (simplest template — single `AppDelegate.cs` + csproj)
+  - Multi-TFM if possible: `<TargetFrameworks>net11.0-ios;net11.0-android</TargetFrameworks>` to demonstrate cross-platform support
+  - Include a comment in the csproj explaining the `_BuildConfig` property group inheritance
+  - Include a note about PGO profiles (either provide an empty `profiles/` directory or document that `R2R_COMP_PGO` should be skipped)
+
+- [ ] **3.5.2** Update the main `README.md` with a "Custom App Measurement" section:
+  - **Source-based workflow:**
+    1. Place app source in `custom-apps/<app-name>/<app-name>.csproj`
+    2. Run `prepare.sh -f --platform <platform>` (copies custom apps into `apps/`)
+    3. Build: `./build.sh --platform <platform> <app-name> <config> build 1`
+    4. Measure: `./measure_startup.sh <app-name> <config> --platform <platform>`
+    5. Or: `./measure_all.sh --platform <platform> --app <app-name>`
+  - **Pre-built workflow:**
+    1. `./measure_startup.sh --prebuilt --package-path /path/to/app.apk --platform android`
+    2. `./measure_startup.sh --prebuilt --package-path /path/to/App.app --platform ios`
+    3. `ios/measure_simulator_startup.sh --no-build --package-path /path/to/App.app`
+  - **Conventions and requirements** (brief — link to `custom-apps/README.md` for details)
+  - **Limitations:** NuGet feed restrictions, PGO profile requirements, `Directory.Build.props` inheritance
+
+- [ ] **3.5.3** Update `custom-apps/README.md` (from Step 3.2) with:
+  - The hello-custom example walkthrough
+  - Troubleshooting section: common errors (csproj name mismatch, missing TFM, NuGet restore failures, `Directory.Build.props` conflicts)
+  - Platform compatibility matrix (which TFMs work with which `--platform` values)
+
+**Files:** `custom-apps/hello-custom/hello-custom.csproj` (new), `custom-apps/README.md` (update), `README.md` (update)
+**Acceptance criteria:**
+- `prepare.sh -f --platform ios` copies `hello-custom` into `apps/`
+- `build.sh --platform ios hello-custom CORECLR_JIT build 1` builds successfully
+- `measure_startup.sh hello-custom CORECLR_JIT --platform ios` measures successfully
+- Documentation covers both workflows with copy-paste-ready commands
+
+---
+
+### Task 3 — Dependencies
+
+```
+Step 3.1 (protect custom apps in prepare.sh)
+  └── Step 3.2 (custom-apps/ directory + registration)
+        └── Step 3.5 (example app + documentation)
+
+Step 3.3 (prebuilt in measure_startup.sh) — independent of 3.1/3.2
+Step 3.4 (prebuilt in simulator script) — independent of 3.1/3.2, can parallel 3.3
+
+Step 3.5 depends on 3.1 + 3.2 (source-based workflow) and 3.3 + 3.4 (pre-built docs)
+```
+
+**Recommended PR / commit order:**
+1. **PR 1:** Steps 3.1 + 3.2 — Source-based custom app infrastructure (prepare.sh protection + custom-apps/ directory)
+2. **PR 2:** Steps 3.3 + 3.4 — Pre-built binary measurement (measure_startup.sh + simulator script)
+3. **PR 3:** Step 3.5 — Example app + end-to-end documentation
+
+PRs 1 and 2 are independent and can be developed in parallel.
+
+### Task 3 — Testing Strategy
+
+#### Source-Based Custom Apps (Steps 3.1 + 3.2)
+
+```bash
+# 1. Place a custom app
+mkdir -p custom-apps/test-custom
+cat > custom-apps/test-custom/test-custom.csproj << 'EOF'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net11.0-ios</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+</Project>
+EOF
+
+# 2. Run prepare.sh -f — custom app should survive and be registered
+./prepare.sh -f --platform ios
+ls apps/test-custom/  # Should exist
+
+# 3. Verify generated apps were regenerated (not stale)
+ls apps/dotnet-new-ios/  # Should exist (freshly generated)
+
+# 4. Build and measure the custom app
+./build.sh --platform ios test-custom CORECLR_JIT build 1
+./measure_all.sh --platform ios --app test-custom --startup-iterations 1
+
+# 5. Run prepare.sh -f again — custom app should still survive
+./prepare.sh -f --platform ios
+ls apps/test-custom/  # Should still exist
+```
+
+#### Pre-Built Binary Measurement (Steps 3.3 + 3.4)
+
+```bash
+# 1. Build an app normally first
+./build.sh --platform ios dotnet-new-ios CORECLR_JIT build 1
+
+# 2. Find the built .app bundle
+APP_BUNDLE=$(find apps/dotnet-new-ios -name "*.app" -path "*/Release/*" | head -1)
+
+# 3. Measure the pre-built binary (no rebuild)
+./measure_startup.sh --prebuilt --package-path "$APP_BUNDLE" --platform ios
+
+# 4. Test auto-extraction of bundle ID
+./measure_startup.sh --prebuilt --package-path "$APP_BUNDLE" --platform ios
+# Should auto-extract bundle ID from Info.plist
+
+# 5. Test with explicit package name
+./measure_startup.sh --prebuilt --package-path "$APP_BUNDLE" --package-name com.companyname.dotnet_new_ios --platform ios
+
+# 6. iOS simulator pre-built
+./ios/measure_simulator_startup.sh --no-build --package-path "$APP_BUNDLE"
+
+# 7. Error cases
+./measure_startup.sh --prebuilt --platform ios  # Should error: --package-path required
+./measure_startup.sh --prebuilt --package-path /nonexistent.app --platform ios  # Should error: path doesn't exist
+```
+
+#### Regression
+
+- `prepare.sh -f --platform android` still works (no custom apps → same behavior as before)
+- `measure_startup.sh dotnet-new-android CORECLR_JIT --platform android` still works (no `--prebuilt` → same behavior)
+- `measure_all.sh --platform ios` still uses default app list (no custom apps in defaults)
+- `generate-apps.sh --platform ios` still generates template apps correctly
+
+### Task 3 — Risks
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| `GENERATED_APPS` list in `prepare.sh` gets out of sync with `generate-apps.sh` | Medium | Add a comment in both files noting the coupling. Consider extracting the list to a shared variable in `init.sh`. |
+| Custom apps with `Directory.Build.props` conflicts | Medium | Document in `custom-apps/README.md` that the repo's `Directory.Build.props` is inherited automatically. Custom apps should not have their own `Directory.Build.props` — or if they do, they must use `<Import>` carefully. |
+| NuGet restore failures for custom apps with external dependencies | Medium | Document in `custom-apps/README.md` that nuget.org is not in the repo's `NuGet.config`. Users must add feeds manually or use `--source` during restore. |
+| Bundle ID auto-extraction fails for unusual app structures | Low | Provide clear error messages explaining `--package-name` as fallback. PlistBuddy is always available on macOS; `aapt2` may not be on PATH for Android. |
+| Pre-built binary architecture mismatch (e.g., device .app on simulator) | Medium | Validate and warn but don't block — the deployment/launch step will fail with a clear error from simctl/adb. |
+| `measure_startup.sh` argument parsing complexity increases significantly | Medium | Keep the `--prebuilt` path as a clean early-exit branch. Parse flags first, then branch: if `--prebuilt`, validate prebuilt requirements and skip to measurement; else, validate source requirements and build first. |
+| Custom apps without PGO profiles fail on `R2R_COMP_PGO` config | Low | Document that `R2R_COMP_PGO` requires `.mibc` profiles in `<app>/profiles/`. Without them, the build succeeds but R2R compilation may not include PGO optimizations (the `--partial` flag allows this gracefully). |
+
