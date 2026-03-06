@@ -143,7 +143,7 @@ Workload versions can be pinned using [`rollback.json`](./rollback.json):
 ```
 
 **Options:**
-- `--platform <android|android-emulator|ios|osx|maccatalyst>` — Target platform (default: `android`)
+- `--platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>` — Target platform (default: `android`)
 - `--startup-iterations N` — Number of startup iterations (default: 10)
 - `--disable-animations` — Disable device animations during measurement
 - `--use-fully-drawn-time` — Use fully drawn time instead of displayed time
@@ -170,8 +170,8 @@ Results are saved to `results/<app>_<config>.trace`.
 # Android emulator (see Emulator / Simulator Support section below)
 ./measure_startup.sh dotnet-new-android R2R --platform android-emulator
 
-# iOS Simulator — use the dedicated script (measure_startup.sh does not support simulators)
-./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --startup-iterations 10
+# iOS Simulator — routed transparently to ios/measure_simulator_startup.sh
+./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios-simulator --startup-iterations 10
 ```
 
 ### Measuring All Configurations
@@ -363,10 +363,9 @@ Physical device platforms (`android`, `ios`) always use `arm64` since modern dev
 ./measure_startup.sh dotnet-new-android CORECLR_JIT --platform android-emulator
 
 # Full workflow: prepare → build → measure on iOS Simulator
-# Note: measure_startup.sh does not support ios-simulator; use the dedicated script
 ./prepare.sh --platform ios-simulator
 ./build.sh --platform ios-simulator dotnet-new-ios CORECLR_JIT build 1
-./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --startup-iterations 10
+./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios-simulator --startup-iterations 10
 
 # Sweep all configs on emulator/simulator
 ./measure_all.sh --platform android-emulator --startup-iterations 5
