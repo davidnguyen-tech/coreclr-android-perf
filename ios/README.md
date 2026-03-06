@@ -1,15 +1,16 @@
 # iOS Performance Measurement Support
 
-iOS-specific build configurations, workarounds, and tooling for CoreCLR startup performance measurement on physical iOS devices.
+iOS-specific build configurations, workarounds, and tooling for CoreCLR startup performance measurement on physical iOS devices and the iOS Simulator.
 
 ## Prerequisites
 
 - **macOS** with Xcode installed (latest stable recommended)
-- **Physical iPhone** (arm64) — iOS Simulator is not supported for accurate startup measurements
-- **Apple Developer account** with a valid provisioning profile for device deployment
-- **xharness** CLI tool (installed automatically by `prepare.sh`)
+- **Physical iPhone** (arm64) for device measurements (`--platform ios`)
+- **iOS Simulator** for simulator measurements (`--platform ios-simulator`) — no physical device or code signing required
+- **Apple Developer account** with a valid provisioning profile for physical device deployment
+- **xharness** CLI tool (installed automatically by `prepare.sh`) — used for physical device deployment only
 - **Python 3** for dotnet/performance test harness
-- **sudo access** may be required for `log collect` (unified log collection)
+- **sudo access** may be required for `log collect` (unified log collection, physical device only)
 
 ## Build Configurations
 
@@ -108,12 +109,84 @@ iOS app deployment and startup measurement uses:
 - **xcrun devicectl** for device interaction and app launching
 - The `dotnet/performance` submodule's `genericiosstartup` scenario handles the measurement harness
 
+## Simulator Support
+
+The iOS Simulator is supported as an alternative to physical devices for development iteration and relative performance comparison. Use `--platform ios-simulator` throughout the workflow.
+
+> **Note:** Simulator startup times are **not** comparable to physical device times. Use simulator measurements for relative comparison between build configurations only.
+
+### Quick Start (Simulator)
+
+```bash
+# Prepare (installs SDK, workloads, generates apps)
+./prepare.sh --platform ios-simulator
+
+# Build
+./build.sh --platform ios-simulator dotnet-new-ios CORECLR_JIT build 1
+
+# Measure startup
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT
+
+# Sweep all configs
+./measure_all.sh --platform ios-simulator --startup-iterations 5
+```
+
+### How It Works
+
+- **RID**: `iossimulator-arm64` on Apple Silicon (M1/M2/M3/M4), `iossimulator-x64` on Intel Macs. The RID is auto-detected based on host architecture.
+- **Measurement**: The custom `ios/measure_simulator_startup.sh` script measures wall-clock duration of `xcrun simctl launch`, which returns after the app process has started. This is a proxy for process startup time — it does not measure time-to-interactive.
+- **No code signing**: Simulator builds do not require an Apple Developer account or provisioning profiles.
+- **No xharness**: Simulator deployment uses `xcrun simctl install` / `xcrun simctl launch` directly — xharness is not needed.
+- **No `sudo`**: Simulator measurements do not use `log collect` and do not require sudo access.
+
+### Simulator Auto-Detection
+
+When no simulator is specified, the script automatically:
+
+1. Checks for a **currently booted** simulator and uses it if found.
+2. If none is booted, finds an **available iPhone simulator** (preferring newer runtimes).
+3. **Boots the simulator** automatically if it was not already running.
+
+You can also specify a simulator explicitly:
+
+```bash
+# By name
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --simulator-name 'iPhone 16'
+
+# By UDID
+./ios/measure_simulator_startup.sh dotnet-new-ios CORECLR_JIT --simulator-udid <UDID>
+```
+
+### Simulator `measure_simulator_startup.sh` Options
+
+```
+Usage: ios/measure_simulator_startup.sh <app-name> <build-config> [options]
+
+Options:
+  --startup-iterations N   Number of startup iterations (default: 10)
+  --simulator-name NAME    Simulator name (e.g. 'iPhone 16')
+  --simulator-udid UDID    Simulator UDID (overrides --simulator-name)
+  --no-build               Skip building, use existing .app bundle
+```
+
+### Simulator Nettrace Collection
+
+For `.nettrace` trace collection on the simulator, use:
+
+```bash
+./ios/collect_nettrace.sh dotnet-new-ios CORECLR_JIT --platform ios-simulator
+```
+
+The simulator runs locally, so nettrace collection uses a **direct Unix-domain diagnostic socket** — no `dotnet-dsrouter` bridge is needed. This follows the same pattern as macOS and Mac Catalyst local tracing.
+
 ## File Structure
 
 ```
 ios/
-├── README.md                  # This file
-├── build-configs.props        # 6 build configuration presets
-├── build-workarounds.targets  # iOS-specific build targets
-└── print_app_sizes.sh         # .app bundle size reporting
+├── README.md                       # This file
+├── build-configs.props             # 6 build configuration presets
+├── build-workarounds.targets       # iOS-specific build targets
+├── collect_nettrace.sh             # .nettrace trace collection (device via dsrouter, simulator via direct socket)
+├── measure_simulator_startup.sh    # Simulator startup measurement (wall-clock timing)
+└── print_app_sizes.sh              # .app bundle size reporting
 ```
