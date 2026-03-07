@@ -32,7 +32,7 @@ The app will automatically inherit build configurations from the repo's `Directo
 
 ## How It Works
 
-During `./prepare.sh`, custom apps in this directory are automatically copied into the `apps/` directory, making them available to `build.sh` and the measurement scripts. This registration step runs after the generated sample apps are created.
+During `./prepare.sh`, custom apps in this directory are automatically copied into the `apps/` directory, making them available to `build.sh` and the measurement scripts. This registration step runs before SDK installation and app generation, and is re-run on every `prepare.sh` invocation.
 
 ## Tracking
 

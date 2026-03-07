@@ -412,7 +412,7 @@ An example `hello-custom` app is included in the repo as a reference.
 ./measure_startup.sh hello-custom CORECLR_JIT --platform android --startup-iterations 10
 ```
 
-Custom apps automatically inherit build configurations from the repo's [`Directory.Build.props`](./Directory.Build.props) and [`Directory.Build.targets`](./Directory.Build.targets), so all 7 build configs (MONO_JIT, CORECLR_JIT, etc.) work without any extra project-level configuration.
+Custom apps automatically inherit build configurations from the repo's [`Directory.Build.props`](./Directory.Build.props) and [`Directory.Build.targets`](./Directory.Build.targets), so all build configs for the target platform work without any extra project-level configuration (7 on Android including standalone R2R; 6 on Apple platforms — see platform-specific `build-configs.props`).
 
 ### Pre-Built Binary Measurement
 
@@ -456,7 +456,7 @@ The `<app-label>` and `<config-label>` arguments are used for result naming only
 
 - **Directory naming:** The subdirectory name must match the `.csproj` file name (e.g., `my-app/my-app.csproj`).
 - **Target frameworks:** Custom apps must target the correct TFM for the selected platform (`net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`). The TFM version should match the SDK version in `global.json`.
-- **Reserved name prefixes:** App names that produce assembly names starting with `Microsoft.`, `System.`, `Mono.`, or `Xamarin.` are rejected — these collide with framework assembly filters used in R2R compilation.
+- **Reserved name prefixes:** App names that produce assembly names starting with `Microsoft.`, `System.`, `Mono.`, or `Xamarin.` should be avoided — these collide with framework assembly filters used in R2R compilation and may cause unexpected build behavior.
 - **NuGet dependencies:** If your app has external NuGet package dependencies, add the required feeds to [`NuGet.config`](./NuGet.config).
 - **MAUI apps:** MAUI-based custom apps work on Android, iOS, and Mac Catalyst, but **not** on macOS/AppKit (`--platform osx`). The `osx` platform only supports AppKit apps (the `dotnet new macos` template).
 - **Tracking:** `custom-apps/` is git-tracked — commit your custom app source code here. `apps/` is gitignored and populated at prepare time.
