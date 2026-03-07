@@ -21,7 +21,7 @@ usage() {
     echo "Downloads MIBC profile packages for the specified platform."
     echo ""
     echo "Options:"
-    echo "  --platform <platform>  Target platform: android, ios, maccatalyst, osx (default: android)"
+    echo "  --platform <platform>  Target platform: android, android-emulator, ios, ios-simulator, maccatalyst, osx (default: android)"
     echo "  --version <version>    Specific NuGet package version (default: latest available)"
     echo "  --help                 Print this help message and exit"
 }
@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --platform)
             if [[ -z "${2:-}" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios, maccatalyst, osx)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, ios-simulator, maccatalyst, osx)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -56,22 +56,26 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate platform
+# Validate platform and map to RID.
+# Simulator/emulator variants fall back to device RIDs because MIBC profiles
+# are only produced for device architectures.
 case "$PLATFORM" in
-    android|ios|maccatalyst|osx) ;;
+    android)          RID="android-arm64" ;;
+    android-emulator)
+        RID="android-arm64"
+        echo "Note: Using android-arm64 profiles for emulator (MIBC profiles are device-only)"
+        ;;
+    ios)              RID="ios-arm64" ;;
+    ios-simulator)
+        RID="ios-arm64"
+        echo "Note: Using ios-arm64 profiles for simulator (MIBC profiles are device-only)"
+        ;;
+    maccatalyst)      RID="maccatalyst-arm64" ;;
+    osx)              RID="osx-arm64" ;;
     *)
-        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, ios, maccatalyst, osx"
+        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, android-emulator, ios, ios-simulator, maccatalyst, osx"
         exit 1
         ;;
-esac
-
-# --- Platform-to-RID Mapping ---
-
-case "$PLATFORM" in
-    android)      RID="android-arm64" ;;
-    ios)          RID="ios-arm64" ;;
-    maccatalyst)  RID="maccatalyst-arm64" ;;
-    osx)          RID="osx-arm64" ;;
 esac
 
 PACKAGE_ID="optimization.${RID}.MIBC.Runtime"
@@ -128,28 +132,20 @@ if [ -z "$VERSION" ]; then
     fi
 else
     # Verify the specified version exists
-    VERSION_EXISTS=$(echo "$HTTP_BODY" | python3 -c "
+    AVAILABLE_VERSIONS=$(echo "$HTTP_BODY" | python3 -c "
 import sys, json
 versions = json.load(sys.stdin)['versions']
 target = sys.argv[1]
 if target in versions:
-    print('yes')
+    print('__FOUND__')
 else:
-    print('no')
-    print('Available versions:', file=sys.stderr)
+    print('Available versions:')
     for v in versions:
-        print(f'  - {v}', file=sys.stderr)
+        print(f'  - {v}')
 " "$VERSION")
-    if [ "$VERSION_EXISTS" != "yes" ]; then
+    if [ "$AVAILABLE_VERSIONS" != "__FOUND__" ]; then
         echo "Error: Version $VERSION not found for package $PACKAGE_ID."
-        # Re-run to print available versions to stdout
-        echo "$HTTP_BODY" | python3 -c "
-import sys, json
-versions = json.load(sys.stdin)['versions']
-print('Available versions:')
-for v in versions:
-    print(f'  - {v}')
-"
+        echo "$AVAILABLE_VERSIONS"
         exit 1
     fi
 fi
@@ -158,7 +154,9 @@ echo "Version: $VERSION"
 
 # --- Download and Extract ---
 
-NUPKG_URL="${FEED_BASE_URL}/${PACKAGE_ID_LOWER}/${VERSION}/${PACKAGE_ID_LOWER}.${VERSION}.nupkg"
+# NuGet V3 flat container spec requires lowercased versions in URLs
+VERSION_LOWER=$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')
+NUPKG_URL="${FEED_BASE_URL}/${PACKAGE_ID_LOWER}/${VERSION_LOWER}/${PACKAGE_ID_LOWER}.${VERSION_LOWER}.nupkg"
 
 echo "Downloading $PACKAGE_ID v${VERSION}..."
 
