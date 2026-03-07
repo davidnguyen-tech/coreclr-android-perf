@@ -46,12 +46,14 @@ print_usage() {
     echo "  --simulator-name NAME    Simulator name (e.g. 'iPhone 16')"
     echo "  --simulator-udid UDID    Simulator UDID (overrides --simulator-name)"
     echo "  --no-build               Skip building, use existing .app bundle"
+    echo "  --package-path PATH      Path to a pre-built .app bundle (implies --no-build)"
     echo "  --help                   Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 dotnet-new-ios CORECLR_JIT"
     echo "  $0 dotnet-new-maui MONO_JIT --startup-iterations 5"
     echo "  $0 dotnet-new-ios R2R_COMP --simulator-name 'iPhone 16' --no-build"
+    echo "  $0 dotnet-new-ios CORECLR_JIT --package-path /path/to/MyApp.app"
     exit 1
 }
 
@@ -75,6 +77,7 @@ ITERATIONS=10
 SIM_NAME=""
 SIM_UDID=""
 SKIP_BUILD=false
+PACKAGE_PATH=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -110,6 +113,14 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --package-path)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --package-path requires a path to a .app bundle"
+                exit 1
+            fi
+            PACKAGE_PATH="$2"
+            shift 2
+            ;;
         --help)
             print_usage
             ;;
@@ -119,6 +130,24 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# ---------------------------------------------------------------------------
+# Validate --package-path (if provided)
+# ---------------------------------------------------------------------------
+if [ -n "$PACKAGE_PATH" ]; then
+    # --package-path implies --no-build
+    SKIP_BUILD=true
+
+    if [ ! -d "$PACKAGE_PATH" ]; then
+        echo "Error: --package-path '$PACKAGE_PATH' does not exist or is not a directory."
+        exit 1
+    fi
+
+    if [[ "$PACKAGE_PATH" != *.app ]]; then
+        echo "Error: --package-path must point to a .app bundle directory, got '$PACKAGE_PATH'"
+        exit 1
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Resolve platform configuration
@@ -132,9 +161,9 @@ if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
     exit 1
 fi
 
-# Validate app directory
+# Validate app directory (only needed when not using --package-path)
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
-if [ ! -d "$APP_DIR" ]; then
+if [ -z "$PACKAGE_PATH" ] && [ ! -d "$APP_DIR" ]; then
     echo "Error: App directory $APP_DIR does not exist."
     echo "Run ./generate-apps.sh --platform ios-simulator first."
     exit 1
@@ -278,23 +307,29 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Locate the built .app bundle
+# Locate the .app bundle
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- Locating built app ---"
+echo "--- Locating app bundle ---"
 
-# Search in bin/ first, fall back to broader search excluding obj/
-APP_BUNDLE=$(find "$APP_DIR/bin" -type d -name "*.app" -not -path "*/obj/*" 2>/dev/null | head -1)
-if [ -z "$APP_BUNDLE" ]; then
-    APP_BUNDLE=$(find "$APP_DIR" -type d -name "*.app" -not -path "*/obj/*" 2>/dev/null | head -1)
-fi
-if [ -z "$APP_BUNDLE" ]; then
-    echo "Error: Could not find .app bundle in $APP_DIR"
-    echo "Ensure the app has been built with: ./build.sh --platform ios-simulator $SAMPLE_APP $BUILD_CONFIG build 1"
-    exit 1
-fi
+if [ -n "$PACKAGE_PATH" ]; then
+    # Use externally provided .app bundle
+    APP_BUNDLE="$PACKAGE_PATH"
+    echo "Using pre-built app bundle: $APP_BUNDLE"
+else
+    # Search in bin/ first, fall back to broader search excluding obj/
+    APP_BUNDLE=$(find "$APP_DIR/bin" -type d -name "*.app" -not -path "*/obj/*" 2>/dev/null | head -1)
+    if [ -z "$APP_BUNDLE" ]; then
+        APP_BUNDLE=$(find "$APP_DIR" -type d -name "*.app" -not -path "*/obj/*" 2>/dev/null | head -1)
+    fi
+    if [ -z "$APP_BUNDLE" ]; then
+        echo "Error: Could not find .app bundle in $APP_DIR"
+        echo "Ensure the app has been built with: ./build.sh --platform ios-simulator $SAMPLE_APP $BUILD_CONFIG build 1"
+        exit 1
+    fi
 
-echo "Found app bundle: $APP_BUNDLE"
+    echo "Found app bundle: $APP_BUNDLE"
+fi
 
 # Record package size (use du -sk for directory bundles)
 PACKAGE_SIZE_KB=$(du -sk "$APP_BUNDLE" | cut -f1)
