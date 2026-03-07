@@ -41,5 +41,5 @@ During `./prepare.sh`, custom apps in this directory are automatically copied in
 
 ## Limitations
 
-- Apps must target the expected Target Framework Monikers (TFMs) for the selected platform (e.g., `net9.0-android`, `net9.0-ios`, `net9.0-maccatalyst`, `net9.0-macos`).
+- Apps must target the expected Target Framework Monikers (TFMs) for the selected platform (e.g., `net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`).
 - If your app has external NuGet dependencies, you may need to add the required package feeds to the repo's `NuGet.config`.
