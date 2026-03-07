@@ -380,6 +380,87 @@ Physical device platforms (`android`, `ios`) always use `arm64` since modern dev
 - **iOS Simulator**: Uses a custom measurement script (`ios/measure_simulator_startup.sh`) that measures wall-clock launch time via `xcrun simctl launch`. The `dotnet/performance` `test.py` harness only supports physical iOS devices (it hardcodes `--target ios-device` and `sudo log collect --device`), so the simulator path bypasses it entirely.
 - **Nettrace collection**: iOS Simulator nettrace collection uses a direct Unix-domain diagnostic socket (no `dotnet-dsrouter` needed), following the same pattern as macOS/Mac Catalyst local tracing.
 
+## Custom App Measurement
+
+In addition to the generated sample apps, you can measure your own apps. There are two workflows: **source-based** custom apps (built from source by the repo tooling) and **pre-built** binaries (bring your own `.apk`, `.app`, or `.ipa`).
+
+### Source-Based Custom Apps
+
+Place your app source code in `custom-apps/<app-name>/` with a `.csproj` file whose name matches the directory:
+
+```
+custom-apps/
+  hello-custom/
+    hello-custom.csproj
+    MainActivity.cs
+```
+
+An example `hello-custom` app is included in the repo as a reference.
+
+**Registration:** Run `./prepare.sh` (with any `--platform` value) to copy custom apps into `apps/`. This happens automatically — custom apps are registered before any other setup steps, and re-registered on every `prepare.sh` run.
+
+**Build and measure:**
+
+```bash
+# 1. Register the custom app (copies custom-apps/ → apps/)
+./prepare.sh --platform android
+
+# 2. Build the app
+./build.sh --platform android hello-custom CORECLR_JIT build 1
+
+# 3. Measure startup
+./measure_startup.sh hello-custom CORECLR_JIT --platform android --startup-iterations 10
+```
+
+Custom apps automatically inherit build configurations from the repo's [`Directory.Build.props`](./Directory.Build.props) and [`Directory.Build.targets`](./Directory.Build.targets), so all build configs for the target platform work without any extra project-level configuration (7 on Android including standalone R2R; 6 on Apple platforms — see platform-specific `build-configs.props`).
+
+### Pre-Built Binary Measurement
+
+If you have an already-built package, you can skip the build step entirely and measure it directly using `--prebuilt --package-path`:
+
+```bash
+./measure_startup.sh <app-label> <config-label> --prebuilt --package-path <path> [options]
+```
+
+The `<app-label>` and `<config-label>` arguments are used for result naming only — they don't affect the measurement.
+
+**Examples:**
+
+```bash
+# Android APK
+./measure_startup.sh my-app CORECLR_JIT --prebuilt --package-path ./MyApp-Signed.apk --platform android
+
+# iOS .app bundle (physical device)
+./measure_startup.sh my-app R2R_COMP --prebuilt --package-path ./MyApp.app --platform ios
+
+# macOS .app bundle
+./measure_startup.sh my-app R2R_COMP --prebuilt --package-path ./MyApp.app --platform osx
+
+# Mac Catalyst .app bundle
+./measure_startup.sh my-app R2R_COMP --prebuilt --package-path ./MyApp.app --platform maccatalyst
+```
+
+**Bundle ID auto-detection:** The bundle identifier is automatically extracted from the package (via `Info.plist` for `.app`/`.ipa`, via `aapt2` for `.apk`). Use `--package-name <bundle-id>` to override auto-detection:
+
+```bash
+./measure_startup.sh my-app R2R_COMP --prebuilt --package-path ./MyApp.app --package-name com.example.myapp --platform ios
+```
+
+**iOS Simulator (pre-built):** Use the simulator startup script directly with `--package-path`:
+
+```bash
+./ios/measure_simulator_startup.sh my-app R2R_COMP --package-path ./MyApp.app --startup-iterations 10
+```
+
+### Conventions and Limitations
+
+- **Directory naming:** The subdirectory name must match the `.csproj` file name (e.g., `my-app/my-app.csproj`).
+- **Target frameworks:** Custom apps must target the correct TFM for the selected platform (`net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`). The TFM version should match the SDK version in `global.json`.
+- **Reserved name prefixes:** App names that produce assembly names starting with `Microsoft.`, `System.`, `Mono.`, or `Xamarin.` should be avoided — these collide with framework assembly filters used in R2R compilation and may cause unexpected build behavior.
+- **NuGet dependencies:** If your app has external NuGet package dependencies, add the required feeds to [`NuGet.config`](./NuGet.config).
+- **MAUI apps:** MAUI-based custom apps work on Android, iOS, and Mac Catalyst, but **not** on macOS/AppKit (`--platform osx`). The `osx` platform only supports AppKit apps (the `dotnet new macos` template).
+- **Tracking:** `custom-apps/` is git-tracked — commit your custom app source code here. `apps/` is gitignored and populated at prepare time.
+
 ## Cleaning Builds
 
 ```bash
@@ -426,9 +507,11 @@ Cleans build artifacts (`bin/`, `obj/`, binlogs) for the specified app or all ap
 │   ├── build-workarounds.targets  #   Build workarounds
 │   ├── collect_nettrace.sh    #   .nettrace trace collection (local, no dsrouter)
 │   └── print_app_sizes.sh    #   .app bundle size reporting
+├── custom-apps/               # User-provided custom apps (git-tracked)
+│   └── hello-custom/          #   Example custom Android app
 ├── profiles/                  # Shared PGO .mibc profiles
 ├── external/performance/      # dotnet/performance submodule
-├── apps/                      # Generated sample apps (gitignored)
+├── apps/                      # Generated + custom apps (gitignored, populated by prepare.sh)
 ├── .dotnet/                   # Local .NET SDK install (gitignored)
 ├── build/                     # Build artifacts (gitignored)
 ├── traces/                    # Collected .nettrace traces (gitignored)
