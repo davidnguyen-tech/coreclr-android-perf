@@ -4,17 +4,12 @@ source "$(dirname "$0")/init.sh"
 
 # Validate passed parameters
 FORCE=false
-USE_ROLLBACK=false
 PLATFORM="android"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -f)
             FORCE=true
-            shift
-            ;;
-        -userollback)
-            USE_ROLLBACK=true
             shift
             ;;
         --platform)
@@ -27,7 +22,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Error: Invalid parameter '$1'."
-            echo "Usage: $0 [-f] [-userollback] [--platform android|android-emulator|ios|ios-simulator|osx|maccatalyst]"
+            echo "Usage: $0 [-f] [--platform android|android-emulator|ios|ios-simulator|osx|maccatalyst]"
             exit 1
             ;;
     esac
@@ -138,14 +133,6 @@ fi
 # Setup workload to take the latest manifests
 "$LOCAL_DOTNET" workload config --update-mode manifests
 
-if [ "$USE_ROLLBACK" = true ]; then
-    "$LOCAL_DOTNET" workload update --from-rollback-file "$SCRIPT_DIR/rollback.json"
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to apply workload rollback."
-        exit 1
-    fi
-fi
-
 # Install platform-specific workloads
 case "$PLATFORM" in
     android|android-emulator)
@@ -156,7 +143,12 @@ case "$PLATFORM" in
     maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst" ;;
 esac
 echo "Installing workloads for $PLATFORM: $WORKLOADS"
-"$LOCAL_DOTNET" workload install $WORKLOADS
+
+# Use --skip-manifest-update to install workloads using the manifests already
+# bundled with the SDK (in sdk-manifests/).  This avoids downloading manifests from
+# NuGet and eliminates version-pinning mismatches that plagued the rollback.json
+# approach.  The SDK version in global.json implicitly pins the manifest versions.
+"$LOCAL_DOTNET" workload install $WORKLOADS --skip-manifest-update
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install workloads."
     exit 1

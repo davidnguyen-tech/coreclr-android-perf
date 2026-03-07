@@ -1,14 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-# Downloads MIBC (Managed Image Based Compilation) profile packages from the
-# dotnet-tools NuGet feed and extracts .mibc files to the profiles/ directory.
+# Downloads MIBC (Managed Image Based Compilation) profile packages from
+# NuGet feeds and extracts .mibc files to the profiles/ directory.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILES_DIR="$SCRIPT_DIR/profiles"
 VERSIONS_LOG="$SCRIPT_DIR/versions.log"
 
-FEED_BASE_URL="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/flat2"
+# NuGet V3 flat container base URLs, tried in order until the package is found.
+# Override with --feed <url>.
+DEFAULT_FEEDS=(
+    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10-transport/nuget/v3/flat2"
+    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/flat2"
+)
+CUSTOM_FEED=""
 
 # --- Argument Parsing ---
 
@@ -23,6 +29,7 @@ usage() {
     echo "Options:"
     echo "  --platform <platform>  Target platform: android, android-emulator, ios, ios-simulator, maccatalyst, osx (default: android)"
     echo "  --version <version>    Specific NuGet package version (default: latest available)"
+    echo "  --feed <url>           NuGet V3 flat container base URL (default: try dotnet10-transport, dotnet-tools)"
     echo "  --help                 Print this help message and exit"
 }
 
@@ -44,6 +51,14 @@ while [[ $# -gt 0 ]]; do
             VERSION="$2"
             shift 2
             ;;
+        --feed)
+            if [[ -z "${2:-}" || "$2" == --* ]]; then
+                echo "Error: --feed requires a URL value"
+                exit 1
+            fi
+            CUSTOM_FEED="$2"
+            shift 2
+            ;;
         --help)
             usage
             exit 0
@@ -60,10 +75,10 @@ done
 # Simulator/emulator variants fall back to device RIDs because MIBC profiles
 # are only produced for device architectures.
 case "$PLATFORM" in
-    android)          RID="android-arm64" ;;
+    android)          RID="android-x64" ;;
     android-emulator)
-        RID="android-arm64"
-        echo "Note: Using android-arm64 profiles for emulator (MIBC profiles are device-only)"
+        RID="android-x64"
+        echo "Note: Using android-x64 profiles for emulator (only android-x64 MIBC training data available)"
         ;;
     ios)              RID="ios-arm64" ;;
     ios-simulator)
@@ -95,9 +110,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Version Resolution ---
+# --- Feed Discovery & Version Resolution ---
 
-INDEX_URL="${FEED_BASE_URL}/${PACKAGE_ID_LOWER}/index.json"
+if [ -n "$CUSTOM_FEED" ]; then
+    FEED_URLS=("$CUSTOM_FEED")
+else
+    FEED_URLS=("${DEFAULT_FEEDS[@]}")
+fi
 
 if [ -z "$VERSION" ]; then
     echo "Querying latest version..."
@@ -105,23 +124,39 @@ else
     echo "Verifying version $VERSION..."
 fi
 
-HTTP_RESPONSE=$(curl -sL -w "\n%{http_code}" "$INDEX_URL") || {
-    echo "Error: Failed to connect to NuGet feed."
-    exit 1
-}
+FEED_BASE_URL=""
+HTTP_BODY=""
 
-HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
-HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+for feed_url in "${FEED_URLS[@]}"; do
+    INDEX_URL="${feed_url}/${PACKAGE_ID_LOWER}/index.json"
+    feed_name="${feed_url#*_packaging/}"
+    feed_name="${feed_name%%/*}"
+    echo "  Trying feed: $feed_name"
 
-if [ "$HTTP_STATUS" = "404" ]; then
-    echo "Warning: Package $PACKAGE_ID not found on the NuGet feed (HTTP 404)."
+    HTTP_RESPONSE=$(curl -sL -w "\n%{http_code}" "$INDEX_URL") || {
+        echo "    → Connection failed, skipping"
+        continue
+    }
+
+    HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+
+    if [ "$HTTP_STATUS" = "200" ]; then
+        FEED_BASE_URL="$feed_url"
+        HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+        echo "    → Found on $feed_name"
+        break
+    elif [ "$HTTP_STATUS" = "404" ]; then
+        echo "    → Not found (404)"
+    else
+        echo "    → HTTP $HTTP_STATUS, skipping"
+    fi
+done
+
+if [ -z "$FEED_BASE_URL" ]; then
+    echo "Warning: Package $PACKAGE_ID not found on any NuGet feed."
+    echo "Feeds tried: ${FEED_URLS[*]}"
     echo "MIBC profiles are optional — crossgen2 --partial will proceed without them."
     exit 0
-fi
-
-if [ "$HTTP_STATUS" != "200" ]; then
-    echo "Error: Unexpected HTTP status $HTTP_STATUS when querying package index."
-    exit 1
 fi
 
 if [ -z "$VERSION" ]; then
