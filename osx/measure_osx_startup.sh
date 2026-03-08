@@ -153,7 +153,7 @@ if [ "$SKIP_BUILD" = false ]; then
     echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) for osx ==="
 
     # Clean previous build artifacts
-    rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
+    rm -rf "${APP_DIR:?}/bin"
 
     mkdir -p "$BUILD_DIR"
 
