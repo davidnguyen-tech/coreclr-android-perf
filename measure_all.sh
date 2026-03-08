@@ -73,8 +73,12 @@ case "$PLATFORM" in
     android|android-emulator)
         ALL_CONFIGS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
         ;;
-    ios|ios-simulator|osx|maccatalyst)
+    ios|ios-simulator|maccatalyst)
         ALL_CONFIGS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R_COMP" "R2R_COMP_PGO")
+        ;;
+    osx)
+        # macOS only supports CoreCLR — Mono is not available
+        ALL_CONFIGS=("CORECLR_JIT" "R2R_COMP" "R2R_COMP_PGO")
         ;;
 esac
 
