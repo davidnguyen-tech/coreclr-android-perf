@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 # Measures macOS app startup time using wall-clock timing.
 #

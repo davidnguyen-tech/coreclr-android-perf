@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 # Measures Mac Catalyst app startup time using wall-clock timing.
 #
