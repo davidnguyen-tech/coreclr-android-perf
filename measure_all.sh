@@ -138,6 +138,12 @@ for i in "${!CONFIGS[@]}"; do
     if [ "$PLATFORM_DEVICE_TYPE" = "ios-simulator" ]; then
         OUTPUT=$("$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$app" "$config" \
             --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+    elif [ "$PLATFORM_DEVICE_TYPE" = "osx" ]; then
+        OUTPUT=$("$SCRIPT_DIR/osx/measure_osx_startup.sh" "$app" "$config" \
+            --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+    elif [ "$PLATFORM_DEVICE_TYPE" = "maccatalyst" ]; then
+        OUTPUT=$("$SCRIPT_DIR/maccatalyst/measure_maccatalyst_startup.sh" "$app" "$config" \
+            --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
     else
         OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
             --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)

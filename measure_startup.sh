@@ -101,6 +101,26 @@ if [[ "$PLATFORM" == "ios-simulator" ]]; then
     exec "$SCRIPT_DIR/ios/measure_simulator_startup.sh" "${SIM_ARGS[@]}" "$@"
 fi
 
+# osx: route to dedicated script — macOS apps run natively, no xharness/test.py needed
+if [[ "$PLATFORM" == "osx" ]]; then
+    OSX_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")
+    if [ "$PREBUILT" = true ]; then
+        OSX_ARGS+=("--package-path" "$PREBUILT_PACKAGE_PATH")
+    fi
+    # Forward any passthrough args (e.g. --startup-iterations)
+    exec "$SCRIPT_DIR/osx/measure_osx_startup.sh" "${OSX_ARGS[@]}" "$@"
+fi
+
+# maccatalyst: route to dedicated script — Mac Catalyst apps run natively, no xharness/test.py needed
+if [[ "$PLATFORM" == "maccatalyst" ]]; then
+    CATALYST_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")
+    if [ "$PREBUILT" = true ]; then
+        CATALYST_ARGS+=("--package-path" "$PREBUILT_PACKAGE_PATH")
+    fi
+    # Forward any passthrough args (e.g. --startup-iterations)
+    exec "$SCRIPT_DIR/maccatalyst/measure_maccatalyst_startup.sh" "${CATALYST_ARGS[@]}" "$@"
+fi
+
 if ! command -v xharness &> /dev/null && [ ! -f "$TOOLS_DIR/xharness" ]; then
     echo "Error: xharness is required but not found. Run ./prepare.sh to install it."
     exit 1
