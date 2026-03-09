@@ -130,11 +130,11 @@ The .NET SDK version is pinned in [`global.json`](./global.json). To test agains
 
 ## Workload Version Pinning
 
-Workload versions can be pinned using [`rollback.json`](./rollback.json):
-
-```bash
-./prepare.sh -f -userollback --platform <platform>
-```
+Workload versions are implicitly pinned by the SDK version in [`global.json`](./global.json).
+The `prepare.sh` script passes `--skip-manifest-update` to `dotnet workload install`, which
+tells the SDK to use the workload manifests bundled in `sdk-manifests/` rather than downloading
+new ones from NuGet. This ensures deterministic, reproducible workload installation without
+maintaining a separate rollback file.
 
 ## Performance Measurements
 
@@ -473,7 +473,6 @@ Cleans build artifacts (`bin/`, `obj/`, binlogs) for the specified app or all ap
 
 ```
 ├── global.json               # SDK version pinning
-├── rollback.json              # Workload version pinning
 ├── Directory.Build.props      # Shared build props — imports platform-specific configs
 ├── Directory.Build.targets    # Shared build targets — imports platform-specific workarounds
 ├── init.sh                    # Common helpers (platform resolution, paths)

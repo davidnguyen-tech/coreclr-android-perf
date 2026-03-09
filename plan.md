@@ -29,7 +29,7 @@ See [.github/researches/ios-platform.md](.github/researches/ios-platform.md) for
 - [x] Update `generate-apps.sh` — generate `dotnet-new-ios` via `dotnet new ios`, include `net11.0-ios` in MAUI TFMs, make profiling patches platform-aware
 - [x] Update `prepare.sh` — install `ios maui-ios` workloads when `--platform ios`
 - [x] Create `ios/README.md` — prerequisites (iPhone, Xcode, sudoers for `log collect`), configs table, usage examples
-- [ ] Fetch iOS MIBC profiles from `dotnet-optimization` CI for R2R_COMP_PGO builds (deferred — stretch goal) (see [Maestro channel 5172](https://maestro.dot.net/channel/5172/azdo:dnceng:internal:dotnet-optimization/build/latest))
+- [ ] Download iOS MIBC profiles for R2R_COMP_PGO builds → **see Step 7**
 
 ---
 
@@ -301,7 +301,7 @@ See [.github/researches/osx-platform.md](.github/researches/osx-platform.md) for
 - [x] Update `generate-apps.sh` — generate `dotnet-new-macos` via `dotnet new macos`
 - [x] Update `prepare.sh` — install `macos` workloads
 - [x] Create `osx/README.md`
-- [ ] Fetch macOS MIBC profiles from `dotnet-optimization` CI if available (deferred — stretch goal)
+- [ ] Download macOS MIBC profiles if available → **see Step 7**
 
 ## Step 4 — Mac Catalyst Platform Support
 
@@ -317,7 +317,7 @@ See [.github/researches/maccatalyst-platform.md](.github/researches/maccatalyst-
 - [x] Update `generate-apps.sh` — no standalone template; MAUI apps only with `net11.0-maccatalyst` TFM
 - [x] Update `prepare.sh` — install `maccatalyst maui-maccatalyst` workloads
 - [x] Create `maccatalyst/README.md`
-- [ ] Fetch Mac Catalyst MIBC profiles from `dotnet-optimization` CI if available (deferred — stretch goal)
+- [ ] Download Mac Catalyst MIBC profiles if available → **see Step 7**
 
 ## Step 5 — Apple .nettrace Collection
 
@@ -916,4 +916,273 @@ APP_BUNDLE=$(find apps/dotnet-new-ios -name "*.app" -path "*/Release/*" | head -
 | Pre-built binary architecture mismatch (e.g., device .app on simulator) | Medium | Validate and warn but don't block — the deployment/launch step will fail with a clear error from simctl/adb. |
 | `measure_startup.sh` argument parsing complexity increases significantly | Medium | Keep the `--prebuilt` path as a clean early-exit branch. Parse flags first, then branch: if `--prebuilt`, validate prebuilt requirements and skip to measurement; else, validate source requirements and build first. |
 | Custom apps without PGO profiles fail on `R2R_COMP_PGO` config | Low | Document that `R2R_COMP_PGO` requires `.mibc` profiles in `<app>/profiles/`. Without them, the build succeeds but R2R compilation may not include PGO optimizations (the `--partial` flag allows this gracefully). |
+
+---
+
+## Step 7 — MIBC Profile Download Script
+
+See [.github/researches/mibc-profiles.md](.github/researches/mibc-profiles.md) for full research, including NuGet V3 API details, package naming, internal structure, and integration points.
+
+**Goal:** Create a `download-mibc.sh` script that downloads MIBC (Managed Image Based Compilation) profiles from the public Azure Artifacts NuGet feed. These profiles are consumed by `R2R_COMP_PGO` builds to guide crossgen2's ReadyToRun compilation for PGO-optimized native images.
+
+**Motivation:** The repo already has full `R2R_COMP_PGO` infrastructure — `generate-apps.sh` copies `profiles/*.mibc` into apps, patches csproj with `_ReadyToRunPgoFiles`, and crossgen2 uses `--mibc` flags. The only missing piece is **downloading the profiles** into the `profiles/` directory. This step completes the PGO pipeline and replaces the "deferred — stretch goal" items in Steps 1, 3, and 4.
+
+**Design decisions:**
+- **Shell script approach** — consistent with repo conventions (`prepare.sh`, `build.sh`, etc.)
+- **NuGet V3 flat container API** — public, no auth required, packages are ZIP files
+- **`dotnet-tools` feed** — already in `NuGet.config` (line 20), confirmed as primary feed for optimization packages
+- **Graceful 404 handling** — some platform packages may not exist; warn and exit 0 (not an error)
+- **Simulator fallback** — `iossimulator-arm64` profiles likely don't exist; fall back to `ios-arm64`
+
+### Overview
+
+**Script:** `download-mibc.sh` (new file at repo root)
+
+**Interface:**
+```
+./download-mibc.sh [--platform <platform>] [--version <version>]
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--platform <platform>` | Target platform (same values as other scripts) | `android` |
+| `--version <version>` | Pin a specific package version | Latest (queried from feed) |
+
+**Behavior:**
+1. Resolve `PLATFORM_RID` from `--platform` via `init.sh`'s `resolve_platform_config()`
+2. Construct package ID: `optimization.{RID}.MIBC.Runtime` (e.g., `optimization.ios-arm64.MIBC.Runtime`)
+3. Query the NuGet V3 flat container API for available versions
+4. Select the latest version (or the user-specified `--version`)
+5. Download the `.nupkg` file
+6. Extract `data/*.mibc` files into `profiles/`
+7. Clean up the downloaded `.nupkg`
+8. Log the downloaded version
+
+**Output:** `.mibc` files in `profiles/` directory (gitignored, consumed by `generate-apps.sh`)
+
+### Step 7.1 — Create `download-mibc.sh`
+
+- [ ] **7.1.1** Create the script file at repo root: `download-mibc.sh`
+
+  **Script structure** (follow existing patterns from `prepare.sh`, `build.sh`):
+
+  ```
+  #!/bin/bash
+  source "$(dirname "$0")/init.sh"
+  # Parse arguments
+  # Resolve platform config
+  # Determine package ID and RID
+  # Query versions from feed
+  # Download nupkg
+  # Extract MIBC files
+  # Clean up
+  # Log results
+  ```
+
+  **Argument parsing** — follow the exact pattern from `prepare.sh` lines 10–34:
+  - Parse `--platform` (default: `android`) and `--version` (default: empty → latest)
+  - Validate `--platform` has a value (not empty or starts with `--`)
+  - Validate `--version` has a value if provided
+  - Unknown flags → error with usage message
+  - Add `print_usage()` function matching the style of `measure_all.sh` lines 11–28
+
+  **Platform config resolution:**
+  - Call `resolve_platform_config "$PLATFORM" || exit 1`
+  - Use `$PLATFORM_RID` to construct the package ID
+
+  **Simulator/emulator RID fallback:**
+  - After resolving `PLATFORM_RID`, check for simulator/emulator RIDs that likely have no MIBC packages
+  - Map: `iossimulator-arm64` → `ios-arm64`, `iossimulator-x64` → `ios-arm64`
+  - Map: `android-x64` → `android-arm64` (emulator on x64 host; arm64 profiles are more likely to exist)
+  - Store the original RID in `ORIGINAL_RID` and the download RID in `DOWNLOAD_RID`
+  - Print a notice when falling back: `"Note: No MIBC profiles for $ORIGINAL_RID, using $DOWNLOAD_RID profiles instead"`
+  - **Do NOT fall back for**: `android-arm64`, `ios-arm64`, `osx-arm64`, `maccatalyst-arm64` — these are the primary targets
+
+  **Package ID construction:**
+  - `PACKAGE_ID="optimization.${DOWNLOAD_RID}.MIBC.Runtime"`
+  - `LOWERCASED_ID=$(echo "$PACKAGE_ID" | tr '[:upper:]' '[:lower:]')` — NuGet flat container requires lowercase in URLs
+
+  **Constants:**
+  - `FLAT_CONTAINER_URL="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/flat2"`
+  - `PROFILES_DIR="$SCRIPT_DIR/profiles"`
+
+- [ ] **7.1.2** Implement version query logic
+
+  **Query available versions:**
+  ```bash
+  VERSIONS_URL="${FLAT_CONTAINER_URL}/${LOWERCASED_ID}/index.json"
+  HTTP_CODE=$(curl -s -o /tmp/mibc-versions.json -w "%{http_code}" "$VERSIONS_URL")
+  ```
+
+  **Handle HTTP responses:**
+  - `200` → parse versions JSON
+  - `404` → package does not exist on this feed. Print warning: `"Warning: MIBC package '$PACKAGE_ID' not found on dotnet-tools feed. R2R_COMP_PGO builds will proceed without PGO profiles (--partial ensures this is safe)."` Exit 0 (not an error — the build will still work with `--partial`).
+  - Other → print error with HTTP code, exit 1
+
+  **Parse versions** — use `python3` (already a prerequisite, used in `prepare.sh` line 86):
+  ```bash
+  VERSION=$(python3 -c "import json,sys; v=json.load(sys.stdin)['versions']; print(v[-1])" < /tmp/mibc-versions.json)
+  ```
+  This selects the last element (latest version, since NuGet returns versions in ascending order).
+
+  **Version override:**
+  - If `--version` was provided, use that value directly instead of querying
+  - Still query the versions list to validate the version exists:
+    ```bash
+    python3 -c "import json,sys; v=json.load(sys.stdin)['versions']; assert sys.argv[1] in v, f'Version {sys.argv[1]} not found'" "$USER_VERSION" < /tmp/mibc-versions.json
+    ```
+  - If validation fails, print the available versions and exit 1
+
+- [ ] **7.1.3** Implement download and extraction
+
+  **Download the nupkg:**
+  ```bash
+  NUPKG_URL="${FLAT_CONTAINER_URL}/${LOWERCASED_ID}/${VERSION}/${LOWERCASED_ID}.${VERSION}.nupkg"
+  NUPKG_FILE="/tmp/${LOWERCASED_ID}.${VERSION}.nupkg"
+  curl -L -f -o "$NUPKG_FILE" "$NUPKG_URL"
+  ```
+  - Use `-f` to fail on HTTP errors (non-2xx)
+  - Check exit code; if non-zero, print error with URL and exit 1
+
+  **Extract MIBC files:**
+  ```bash
+  mkdir -p "$PROFILES_DIR"
+  unzip -j -o "$NUPKG_FILE" 'data/*.mibc' -d "$PROFILES_DIR"
+  ```
+  - `-j` — junk paths (flatten `data/` prefix, extract directly into `profiles/`)
+  - `-o` — overwrite existing files without prompting
+
+  **Validate extraction:**
+  - Check that at least one `.mibc` file was extracted:
+    ```bash
+    MIBC_COUNT=$(find "$PROFILES_DIR" -name "*.mibc" -maxdepth 1 | wc -l)
+    ```
+  - If zero, warn: `"Warning: No .mibc files found in package $PACKAGE_ID $VERSION"`
+
+  **Cleanup:**
+  - `rm -f "$NUPKG_FILE"` — remove the downloaded nupkg (it can be large)
+  - `rm -f /tmp/mibc-versions.json` — remove the versions cache
+
+- [ ] **7.1.4** Implement logging and output
+
+  **Console output** — print clear, informative messages at each stage:
+  ```
+  === Downloading MIBC profiles ===
+  Platform: ios (RID: ios-arm64)
+  Package: optimization.ios-arm64.MIBC.Runtime
+  Version: 1.0.0-prerelease.25.12345.2 (latest)
+  Downloading from: https://pkgs.dev.azure.com/...
+  Extracting to: /path/to/profiles/
+  Extracted 3 MIBC profile(s):
+    - scenario1.mibc
+    - scenario2.mibc
+    - scenario3.mibc
+  === MIBC profile download complete ===
+  ```
+
+  **`versions.log` integration:**
+  - Append a line to `$VERSIONS_LOG`: `"mibc profiles: $PACKAGE_ID $VERSION"`
+  - Use `>>` (append), not `>` (overwrite), since `versions.log` is populated by `prepare.sh`
+  - Only append if `$VERSIONS_LOG` is set and writable
+
+  **List extracted files:**
+  - After extraction, list the `.mibc` files in `profiles/` so the user can see what was downloaded
+
+- [ ] **7.1.5** Add `--help` flag
+
+  Follow `measure_all.sh` pattern (lines 11–28):
+  ```
+  Usage: ./download-mibc.sh [options]
+
+  Downloads MIBC (PGO) profiles for ReadyToRun Composite PGO builds.
+
+  Options:
+    --platform <name>    Target platform: android, android-emulator, ios, ios-simulator, osx, maccatalyst (default: android)
+    --version <version>  Pin a specific MIBC package version (default: latest)
+    --help               Show this help message
+
+  The downloaded profiles are placed in profiles/ and are automatically
+  picked up by generate-apps.sh for R2R_COMP_PGO builds.
+
+  Examples:
+    ./download-mibc.sh --platform ios                    # Latest iOS profiles
+    ./download-mibc.sh --platform android --version 1.0.0-prerelease.25.12345.2
+  ```
+
+**Files:** `download-mibc.sh` (new)
+
+**Acceptance criteria:**
+- `./download-mibc.sh --platform ios` downloads MIBC profiles into `profiles/` (or warns gracefully if package doesn't exist)
+- `./download-mibc.sh --platform android --version 1.0.0-prerelease.25.12345.2` downloads the specific version
+- `./download-mibc.sh --platform ios-simulator` falls back to `ios-arm64` profiles with a notice
+- `./download-mibc.sh --help` prints usage
+- Invalid `--version` prints available versions and exits 1
+- The script is executable (`chmod +x`)
+- No authentication required — uses public feed only
+
+---
+
+### Step 7 — Dependencies
+
+```
+Step 7.1 — self-contained, no dependencies on other steps
+  7.1.1 (script skeleton + arg parsing)
+    └── 7.1.2 (version query)
+        └── 7.1.3 (download + extraction)
+            └── 7.1.4 (logging)
+  7.1.5 (help) — independent, can be done with 7.1.1
+```
+
+This is a **single PR** with one commit. All sub-items (7.1.1–7.1.5) are parts of the same file and should be implemented together.
+
+### Step 7 — Testing Strategy
+
+```bash
+# 1. Basic download — latest version for a known platform
+./download-mibc.sh --platform android
+ls profiles/*.mibc    # Should contain at least one .mibc file
+cat versions.log      # Should contain "mibc profiles: optimization.android-arm64.MIBC.Runtime ..."
+
+# 2. Specific version
+./download-mibc.sh --platform android --version 1.0.0-prerelease.25.12345.2
+# Should download exactly that version
+
+# 3. Invalid version
+./download-mibc.sh --platform android --version 99.99.99
+# Should error with available versions listed
+
+# 4. Platform that may not have profiles
+./download-mibc.sh --platform osx
+# Should either download profiles or warn gracefully (exit 0)
+
+# 5. Simulator fallback
+./download-mibc.sh --platform ios-simulator
+# Should print notice about falling back to ios-arm64, then download
+
+# 6. Help
+./download-mibc.sh --help
+# Should print usage and exit 0
+
+# 7. End-to-end integration — verify generate-apps.sh picks up profiles
+./download-mibc.sh --platform ios
+./generate-apps.sh --platform ios
+ls apps/dotnet-new-ios/profiles/*.mibc    # Should contain copied .mibc files
+
+# 8. Idempotency — running twice should overwrite cleanly
+./download-mibc.sh --platform ios
+./download-mibc.sh --platform ios
+# No errors, profiles/ contains same files
+```
+
+### Step 7 — Risks
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| MIBC packages may not exist for Apple platforms (`ios-arm64`, `osx-arm64`, etc.) | High | Handle HTTP 404 gracefully — warn and exit 0. The `--partial` crossgen2 flag ensures R2R_COMP_PGO builds succeed without profiles (just without PGO optimization). Verify package existence during development by testing the versions URL manually. |
+| Feed URL changes in future .NET versions | Low | The `dotnet-tools` feed URL is a well-known constant. Hardcode it with a comment. If it changes, a single line edit fixes it. |
+| `python3` not available | Low | Already a prerequisite for the repo (used in `prepare.sh` line 86, `generate-apps.sh` lines 74, 123). Validated in `prepare.sh` line 75. |
+| Large nupkg download on slow connections | Low | MIBC packages are typically small (< 10 MB). The download is a single HTTP request. Consider adding `--progress-bar` to curl for visibility. |
+| `unzip` not extracting `data/*.mibc` if internal structure differs across versions | Low | The `data/` directory is the documented and observed path for all known optimization packages (confirmed in MAUI reference). If the structure changes, the extraction will silently produce zero files — caught by the post-extraction validation (Step 7.1.3). |
+| Temp file collisions if script is run concurrently | Low | Use a unique temp directory (`mktemp -d`) instead of fixed `/tmp/mibc-*` paths. Clean up in a `trap` handler. |
+| NuGet versions list is empty (feed returns `{"versions": []}`) | Low | Check that the parsed version is non-empty before proceeding. Print an error: "No versions found for package..." |
 
