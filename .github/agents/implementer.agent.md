@@ -55,6 +55,12 @@ When adding support for a new platform:
 - Ensure `measure_all.sh` has the correct default app list and config list for the new platform
 - Test that `measure_startup.sh` correctly discovers the built package (file vs directory)
 
+## Measurement Results
+
+- Measurement scripts must write results to `$RESULTS_DIR` (defined in `init.sh`), never to the repo working tree.
+- Results are ephemeral — the orchestrator handles publishing them to secret gists after measurement completes.
+- Never add result files to git commits.
+
 ## Learning from Mistakes
 
 When you make a mistake (build failure, incorrect assumption, missed edge case) or a reviewer finds an issue in your work, don't just fix it — **backtrack to understand WHY** it happened.

@@ -74,6 +74,11 @@ If the environment isn't fully set up (no SDK, no workloads), run what you can (
 - If no issues found, approve with `gh pr review <number> --approve --body "LGTM — no issues found"`
 - If issues found, request changes with `gh pr review <number> --request-changes --body "..."` and list all findings
 
+## Measurement Results
+
+- Verify that measurement scripts write results only to `$RESULTS_DIR` (gitignored), never to the repo working tree.
+- Flag any PR that would commit measurement data (CSVs, traces, logs) to the repo.
+
 ## Learning from Mistakes
 
 When you make a mistake (missed a real bug, flagged a false positive, incorrect platform assumption) or your review feedback is challenged, don't just move on — **backtrack to understand WHY** it happened.
