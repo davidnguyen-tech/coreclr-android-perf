@@ -56,7 +56,8 @@ nunit-*.xml
 # Custom
 .dotnet/
 versions.log
-tools/
+tools/*
+!tools/apple_measure_lib.sh
 packages/
 build/
 apps/
