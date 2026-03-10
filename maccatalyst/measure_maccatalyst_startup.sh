@@ -1,18 +1,17 @@
 #!/bin/bash
 
-# Measures Mac Catalyst app startup time using wall-clock timing.
+# Measures Mac Catalyst app startup time using window-appearance timing.
 #
 # This script measures Mac Catalyst (.app bundle) startup by launching the
-# app via `open` and timing the wall-clock duration of the launch command.
-# Mac Catalyst apps are native macOS .app bundles built from iOS/MAUI code,
-# so the launch and measurement mechanism is the same as for native macOS apps.
+# app via `open` and waiting for the first visible window to appear (detected
+# via System Events AppleScript). Mac Catalyst apps are native macOS .app
+# bundles built from iOS/MAUI code, so the same window-detection technique
+# used for macOS apps works here.
 #
-# Startup time is measured as the wall-clock duration of `open /path/to/App.app`,
-# which returns after LaunchServices has started the app process. This is a
-# proxy for process startup time — it does not measure time-to-interactive.
-# This mirrors the iOS simulator script's approach of timing `xcrun simctl launch`.
+# NOTE: Requires Accessibility permission for the terminal app on first run.
 
 source "$(dirname "$0")/../init.sh"
+source "$SCRIPT_DIR/tools/apple_measure_lib.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites
@@ -33,7 +32,7 @@ fi
 print_usage() {
     echo "Usage: $0 <app-name> <build-config> [options]"
     echo ""
-    echo "Measures Mac Catalyst app startup time using wall-clock timing."
+    echo "Measures Mac Catalyst app startup time using window-appearance timing."
     echo ""
     echo "Apps:     dotnet-new-maui, dotnet-new-maui-samplecontent"
     echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R_COMP, R2R_COMP_PGO"
@@ -300,14 +299,12 @@ for ((i = 1; i <= ITERATIONS; i++)); do
     # Clean state: terminate any running instance
     terminate_app
 
-    # Measure launch time using python3 for sub-millisecond precision
-    # (macOS date does not support %N for nanoseconds)
-    START_NS=$(python3 -c "import time; print(time.time_ns())")
+    # Capture start timestamp
+    START_NS=$(get_timestamp_ns)
 
+    # Launch the app asynchronously via LaunchServices
     open "$APP_BUNDLE" 2>/dev/null
     LAUNCH_RESULT=$?
-
-    END_NS=$(python3 -c "import time; print(time.time_ns())")
 
     if [ $LAUNCH_RESULT -ne 0 ]; then
         echo "  [$i/$ITERATIONS] FAILED — open returned $LAUNCH_RESULT"
@@ -315,7 +312,17 @@ for ((i = 1; i <= ITERATIONS; i++)); do
         continue
     fi
 
-    ELAPSED_MS=$(python3 -c "print(f'{($END_NS - $START_NS) / 1_000_000:.2f}')")
+    # Wait for the app's first window to appear (actual startup completion)
+    if ! wait_for_window "$EXECUTABLE_NAME" 30; then
+        echo "  [$i/$ITERATIONS] FAILED — app window did not appear within 30s"
+        terminate_app
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        continue
+    fi
+
+    # Capture end timestamp AFTER window appears
+    END_NS=$(get_timestamp_ns)
+    ELAPSED_MS=$(elapsed_ms "$START_NS" "$END_NS")
     TIMES+=("$ELAPSED_MS")
 
     echo "  [$i/$ITERATIONS] ${ELAPSED_MS} ms"
@@ -337,25 +344,8 @@ if [ ${#TIMES[@]} -eq 0 ]; then
     exit 1
 fi
 
-# Use python3 for reliable statistics computation
-STATS=$(python3 << PYEOF
-import statistics
-times = [${TIMES[0]}$(printf ', %s' "${TIMES[@]:1}")]
-times.sort()
-n = len(times)
-avg = statistics.mean(times)
-median = statistics.median(times)
-min_t = min(times)
-max_t = max(times)
-stdev = statistics.stdev(times) if n > 1 else 0.0
-print(f'{avg:.2f}')
-print(f'{median:.2f}')
-print(f'{min_t:.2f}')
-print(f'{max_t:.2f}')
-print(f'{stdev:.2f}')
-print(f'{n}')
-PYEOF
-)
+# Use shared library for reliable statistics computation
+STATS=$(compute_stats "${TIMES[@]}")
 
 AVG=$(echo "$STATS" | sed -n '1p')
 MEDIAN=$(echo "$STATS" | sed -n '2p')
@@ -379,25 +369,16 @@ echo "  StdDev: ${STDEV} ms"
 echo ""
 
 # Output parseable summary line compatible with measure_all.sh parsing
-# Format: Generic Startup | <avg> | <min> | <max>
-echo "Generic Startup | ${AVG} | ${MIN} | ${MAX}"
-echo "APP size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
+print_measurement_summary "$AVG" "$MIN" "$MAX" "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES"
 
 # ---------------------------------------------------------------------------
 # Save detailed results to CSV
 # ---------------------------------------------------------------------------
 mkdir -p "$RESULTS_DIR"
 RESULT_FILE="$RESULTS_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_maccatalyst.csv"
-
-{
-    echo "iteration,time_ms"
-    for ((idx = 0; idx < ${#TIMES[@]}; idx++)); do
-        echo "$((idx + 1)),${TIMES[$idx]}"
-    done
-    echo ""
-    echo "# summary: avg_ms,median_ms,min_ms,max_ms,stdev_ms,count,app,config,platform,pkg_size_mb,pkg_size_bytes"
-    echo "$AVG,$MEDIAN,$MIN,$MAX,$STDEV,$COUNT,$SAMPLE_APP,$BUILD_CONFIG,maccatalyst,$PACKAGE_SIZE_MB,$PACKAGE_SIZE_BYTES"
-} > "$RESULT_FILE"
+save_results_csv "$RESULT_FILE" "$SAMPLE_APP" "$BUILD_CONFIG" "maccatalyst" \
+    "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES" \
+    "$AVG" "$MEDIAN" "$MIN" "$MAX" "$STDEV" "$COUNT" "${TIMES[@]}"
 
 echo ""
 echo "Results saved to: $RESULT_FILE"
