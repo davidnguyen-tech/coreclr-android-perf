@@ -263,33 +263,35 @@ sys.exit(1)
 # See: .github/researches/ios-device-log-streaming.md for full analysis.
 
 # Collect device logs for a time window into a .logarchive file.
-# Requires: passwordless sudo configured for 'log collect'.
+# Requires: passwordless sudo configured for '/usr/bin/log'.
 #
 # Arguments:
-#   $1 - start_timestamp  Start time in "YYYY-MM-DD HH:MM:SS±ZZZZ" format
-#   $2 - output_path      Path for the output .logarchive (directory)
+#   $1 - device_udid      Target device UDID (uses --device-udid for precise targeting)
+#   $2 - start_timestamp  Start time in "YYYY-MM-DD HH:MM:SS±ZZZZ" format
+#   $3 - output_path      Path for the output .logarchive (directory)
 #
 # Returns:
 #   0 - Collection succeeded
 #   1 - Collection failed
 collect_device_logs() {
-    local start_timestamp="$1"
-    local output_path="$2"
+    local device_udid="$1"
+    local start_timestamp="$2"
+    local output_path="$3"
 
-    if [ -z "$start_timestamp" ] || [ -z "$output_path" ]; then
-        echo "Error: collect_device_logs requires start_timestamp and output_path." >&2
+    if [ -z "$device_udid" ] || [ -z "$start_timestamp" ] || [ -z "$output_path" ]; then
+        echo "Error: collect_device_logs requires device_udid, start_timestamp, and output_path." >&2
         return 1
     fi
 
     # Remove previous logarchive at this path if it exists
     rm -rf "$output_path"
 
-    sudo log collect --device \
+    sudo log collect --device-udid "$device_udid" \
         --start "$start_timestamp" \
         --output "$output_path" 2>&1
 
     if [ $? -ne 0 ] || [ ! -d "$output_path" ]; then
-        echo "Error: sudo log collect --device failed." >&2
+        echo "Error: sudo log collect --device-udid failed." >&2
         return 1
     fi
     return 0

@@ -49,11 +49,13 @@ if ! xcrun devicectl --version &> /dev/null; then
     exit 1
 fi
 
-# Verify passwordless sudo for log collect (required for device log collection)
-if ! sudo -n true 2>/dev/null; then
+# Verify passwordless sudo for /usr/bin/log (required for device log collection).
+# We test the actual command rather than `sudo -n true` because users may configure
+# NOPASSWD only for /usr/bin/log (not all commands).
+if ! sudo -n /usr/bin/log help 2>/dev/null; then
     echo "Error: Passwordless sudo is required for 'sudo log collect --device'."
     echo ""
-    echo "Configure passwordless sudo by adding this to /etc/sudoers (via visudo):"
+    echo "Configure passwordless sudo for /usr/bin/log by adding this to /etc/sudoers (via visudo):"
     echo "  $(whoami) ALL=(ALL) NOPASSWD: /usr/bin/log"
     echo ""
     echo "Or for broader access:"
@@ -362,6 +364,10 @@ fi
 #   - Subsequent iterations measure startup via SpringBoard Watchdog events
 #   - Inter-iteration wait is 10 seconds (matching runner.py)
 #   - Each iteration: launch → wait 5s → collect logs → parse Watchdog events
+#
+# NOTE: Unlike runner.py which keeps the app installed between iterations (warm starts),
+# we uninstall/reinstall each iteration to measure cold-start performance consistently.
+# This matches the behavior of the simulator measurement script (ios/measure_simulator_startup.sh).
 echo ""
 echo "=== Measuring startup ($ITERATIONS iterations + 1 warmup) ==="
 echo ""
@@ -432,7 +438,7 @@ for ((i = 0; i <= ITERATIONS; i++)); do
 
     # Collect device logs for this iteration
     LOGARCHIVE="/tmp/ios_startup_iteration_${i}.logarchive"
-    COLLECT_OUTPUT=$(collect_device_logs "$COLLECT_START" "$LOGARCHIVE" 2>&1)
+    COLLECT_OUTPUT=$(collect_device_logs "$DEVICE_UDID" "$COLLECT_START" "$LOGARCHIVE" 2>&1)
     COLLECT_RESULT=$?
 
     # Terminate the app now that logs are collected
