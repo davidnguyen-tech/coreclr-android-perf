@@ -77,7 +77,10 @@ The document should contain:
    - Any measurement anomalies
 
 5. **Methodology**: A brief section explaining:
-   - How startup time is measured (time-to-main via timestamped log parsing)
+   - How startup time is measured per platform:
+     - **macOS & Mac Catalyst**: Window-appearance detection — after `open`, polls System Events AppleScript until the app's first window appears (`wait_for_window` from `tools/apple_measure_lib.sh`). Captures launch-to-visible time.
+     - **iOS Simulator**: OS log stream event detection — starts `log stream` before `xcrun simctl launch`, waits for the first log event from the app process (`wait_for_log_event` from `tools/apple_measure_lib.sh`). Captures launch-to-event time.
+   - That all measurements exclude build time — only the launch-to-visible/launch-to-event interval is captured
    - That iteration 1 is typically a cold-launch outlier
    - Why median is the primary metric (robust against outliers)
    - The number of iterations used
@@ -109,7 +112,7 @@ After uploading:
 
 - **`prepare.sh` resets the SDK** — platforms cannot be measured simultaneously. Each platform must be prepared immediately before measurement.
 - **MAUI workload dependencies** — MAUI apps require both `ios` and `maccatalyst` workloads regardless of which platform is the build target. The restore step resolves NuGet packages for sibling platforms.
-- **`dotnet-new-ios` workload** — Pure iOS template apps (via `dotnet new ios`) may need the `mobile-librarybuilder-net10` workload installed.
+- **`dotnet-new-ios` builds** — Pure iOS template apps (via `dotnet new ios`) may fail with workload errors that are separate from the MAUI workload cross-dependency issue above.
 - **Cold-launch outlier** — Iteration 1 is typically a cold-launch outlier. Median is more reliable than average for comparing configurations.
 - **Library preservation** — After `prepare.sh`, verify `tools/apple_measure_lib.sh` still exists. It should be preserved by the `*.sh` exclusion in the tools cleanup, but always confirm.
 - **High variance on desktop platforms** — Mac Catalyst and macOS measurements have higher variance than iOS Simulator. Use at least 10 iterations and report median as the primary metric.
