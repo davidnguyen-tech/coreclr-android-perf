@@ -93,6 +93,15 @@ if [ -n "$PREBUILT_PACKAGE_PATH" ] && [ "$PREBUILT" = false ]; then
     exit 1
 fi
 
+# ios device: route to dedicated script — xharness mlaunch is incompatible with iOS 17+ devices
+if [[ "$PLATFORM" == "ios" ]]; then
+    IOS_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")
+    if [ "$PREBUILT" = true ]; then
+        IOS_ARGS+=("--package-path" "$PREBUILT_PACKAGE_PATH")
+    fi
+    exec "$SCRIPT_DIR/ios/measure_device_startup.sh" "${IOS_ARGS[@]}" "$@"
+fi
+
 # ios-simulator: route to dedicated script — test.py only supports physical iOS devices
 if [[ "$PLATFORM" == "ios-simulator" ]]; then
     SIM_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")
