@@ -49,19 +49,10 @@ if ! xcrun devicectl --version &> /dev/null; then
     exit 1
 fi
 
-# Verify passwordless sudo for /usr/bin/log (required for device log collection).
-# We test the actual command rather than `sudo -n true` because users may configure
-# NOPASSWD only for /usr/bin/log (not all commands).
-if ! sudo -n /usr/bin/log collect --help 2>/dev/null; then
-    echo "Error: Passwordless sudo is required for 'sudo log collect --device'."
-    echo ""
-    echo "Configure passwordless sudo for /usr/bin/log by adding this to /etc/sudoers (via visudo):"
-    echo "  $(whoami) ALL=(ALL) NOPASSWD: /usr/bin/log"
-    echo ""
-    echo "Or for broader access:"
-    echo "  $(whoami) ALL=(ALL) NOPASSWD: ALL"
-    exit 1
-fi
+# Note: This script requires passwordless sudo for /usr/bin/log.
+# The 'collect_device_logs' function runs 'sudo log collect --device-udid ...'
+# and will fail with a clear error if sudo is not configured.
+# See ios/README.md for setup instructions.
 
 # ---------------------------------------------------------------------------
 # Usage
