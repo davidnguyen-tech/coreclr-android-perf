@@ -286,12 +286,17 @@ collect_device_logs() {
     # Remove previous logarchive at this path if it exists
     rm -rf "$output_path"
 
-    sudo log collect --device-udid "$device_udid" \
+    local collect_output
+    collect_output=$(sudo log collect --device-udid "$device_udid" \
         --start "$start_timestamp" \
-        --output "$output_path" 2>&1
+        --output "$output_path" 2>&1)
+    local collect_exit=$?
 
-    if [ $? -ne 0 ] || [ ! -d "$output_path" ]; then
-        echo "Error: sudo log collect --device-udid failed." >&2
+    if [ $collect_exit -ne 0 ] || [ ! -d "$output_path" ]; then
+        echo "Error: 'sudo log collect' failed (exit $collect_exit)." >&2
+        echo "  Ensure passwordless sudo is configured for /usr/bin/log." >&2
+        echo "  Add to /etc/sudoers: $(whoami) ALL=(ALL) NOPASSWD: /usr/bin/log" >&2
+        echo "  Output: $collect_output" >&2
         return 1
     fi
     return 0
