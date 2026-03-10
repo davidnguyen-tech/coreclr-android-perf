@@ -48,6 +48,7 @@ print_usage() {
     echo "  --simulator-udid UDID    Simulator UDID (overrides --simulator-name)"
     echo "  --no-build               Skip building, use existing .app bundle"
     echo "  --package-path PATH      Path to a pre-built .app bundle (implies --no-build)"
+    echo "  --collect-trace           Collect a .nettrace EventPipe trace (extra iteration, excluded from timing)"
     echo "  --help                   Show this help message"
     echo ""
     echo "Examples:"
@@ -55,6 +56,7 @@ print_usage() {
     echo "  $0 dotnet-new-maui MONO_JIT --startup-iterations 5"
     echo "  $0 dotnet-new-ios R2R_COMP --simulator-name 'iPhone 16' --no-build"
     echo "  $0 dotnet-new-ios CORECLR_JIT --package-path /path/to/MyApp.app"
+    echo "  $0 dotnet-new-ios CORECLR_JIT --collect-trace"
     exit 1
 }
 
@@ -79,6 +81,7 @@ SIM_NAME=""
 SIM_UDID=""
 SKIP_BUILD=false
 PACKAGE_PATH=""
+COLLECT_TRACE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -121,6 +124,10 @@ while [[ $# -gt 0 ]]; do
             fi
             PACKAGE_PATH="$2"
             shift 2
+            ;;
+        --collect-trace)
+            COLLECT_TRACE=true
+            shift
             ;;
         --help)
             print_usage
@@ -394,11 +401,100 @@ cleanup() {
     echo ""
     echo "--- Cleaning up ---"
     stop_log_stream
+    unset_simctl_eventpipe_env
     xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
     xcrun simctl uninstall "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
 }
 
 trap cleanup EXIT
+
+# ---------------------------------------------------------------------------
+# Trace collection (extra iteration, excluded from timing)
+# ---------------------------------------------------------------------------
+TRACE_FILE=""
+
+if [ "$COLLECT_TRACE" = true ]; then
+    echo ""
+    echo "=== Collecting .nettrace trace (extra iteration, excluded from timing) ==="
+
+    # Ensure results directory exists
+    mkdir -p "$RESULTS_DIR"
+    TRACE_OUTPUT_PATH="/tmp/${SAMPLE_APP}_${BUILD_CONFIG}_sim_$$.nettrace"
+    TRACE_FILE="$RESULTS_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_simulator.nettrace"
+
+    # Clean state
+    xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+    xcrun simctl uninstall "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+
+    # Fresh install
+    xcrun simctl install "$SIM_UDID" "$APP_BUNDLE" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        echo "  [trace] Warning: Could not install app for trace collection"
+        TRACE_FILE=""
+    else
+        # Set SIMCTL_CHILD_ prefixed env vars so the simulator passes them to the app
+        setup_simctl_eventpipe_env "$TRACE_OUTPUT_PATH"
+
+        echo "  [trace] Launching $EXECUTABLE_NAME with EventPipe enabled..."
+        echo "  [trace] Trace output: $TRACE_OUTPUT_PATH"
+
+        # Start log stream to detect startup
+        start_log_stream "process == \"$EXECUTABLE_NAME\""
+
+        # Launch the app
+        xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID" > /dev/null 2>&1
+        LAUNCH_RESULT=$?
+
+        if [ $LAUNCH_RESULT -ne 0 ]; then
+            stop_log_stream
+            echo "  [trace] Warning: simctl launch failed ($LAUNCH_RESULT)"
+            TRACE_FILE=""
+        else
+            # Wait for the app to start
+            if wait_for_log_event "$EXECUTABLE_NAME" 60 > /dev/null; then
+                echo "  [trace] App started — waiting for trace events to flush..."
+                # Give time for events to be written
+                sleep 3
+            else
+                echo "  [trace] Warning: No log events within 60s, continuing anyway"
+                sleep 5
+            fi
+            stop_log_stream
+
+            # Terminate the app — triggers trace file flush
+            xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+        fi
+
+        # Unset SIMCTL_CHILD_ env vars immediately
+        unset_simctl_eventpipe_env
+
+        # Wait briefly for the trace file to be fully written
+        sleep 1
+
+        # Find the trace file. It may be at the output path directly, or
+        # inside the simulator's app data container.
+        SEARCH_DIRS="/tmp"
+        APP_DATA_CONTAINER=$(xcrun simctl get_app_container "$SIM_UDID" "$BUNDLE_ID" data 2>/dev/null || true)
+        if [ -n "$APP_DATA_CONTAINER" ]; then
+            SEARCH_DIRS="$SEARCH_DIRS $APP_DATA_CONTAINER"
+        fi
+
+        if [ -n "$TRACE_FILE" ]; then
+            if collect_nettrace "$TRACE_OUTPUT_PATH" "$TRACE_FILE" "$SEARCH_DIRS"; then
+                echo "  [trace] Success"
+            else
+                echo "  [trace] Warning: Could not collect .nettrace file"
+                TRACE_FILE=""
+            fi
+        fi
+
+        # Uninstall after trace collection
+        xcrun simctl uninstall "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+    fi
+
+    # Brief pause before timing iterations
+    sleep 1
+fi
 
 # ---------------------------------------------------------------------------
 # Measurement loop
@@ -513,3 +609,8 @@ save_results_csv "$RESULT_FILE" "$SAMPLE_APP" "$BUILD_CONFIG" "$SIM_NAME_RESOLVE
 
 echo ""
 echo "Results saved to: $RESULT_FILE"
+
+# Report trace file location if collected
+if [ -n "$TRACE_FILE" ] && [ -f "$TRACE_FILE" ]; then
+    echo "Trace saved to: $TRACE_FILE"
+fi

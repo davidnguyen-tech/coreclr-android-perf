@@ -7,7 +7,7 @@ PLATFORM="android"
 ITERATIONS=10
 EXTRA_ARGS=()
 SELECTED_APPS=()
-
+COLLECT_TRACE_FLAG=""
 print_usage() {
     echo "Usage: $0 [options]"
     echo ""
@@ -17,6 +17,7 @@ print_usage() {
     echo "  --platform <name>          Target platform: android, android-emulator, ios, ios-simulator, osx, maccatalyst (default: android)"
     echo "  --app <name>               Measure only this app (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
+    echo "  --collect-trace            Collect .nettrace EventPipe traces for each measurement"
     echo "  --help                     Show this help message"
     echo ""
     echo "Examples:"
@@ -24,6 +25,7 @@ print_usage() {
     echo "  $0 --platform ios                           # iOS platform, all configs"
     echo "  $0 --startup-iterations 3                   # All apps, all configs, 3 iterations"
     echo "  $0 --app dotnet-new-android                 # Only Android app, all configs"
+    echo "  $0 --platform osx --collect-trace           # macOS, all configs, with traces"
     exit 0
 }
 
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             fi
             ITERATIONS="$2"
             shift 2
+            ;;
+        --collect-trace)
+            COLLECT_TRACE_FLAG="--collect-trace"
+            shift
             ;;
         --help)
             print_usage
@@ -141,16 +147,16 @@ for i in "${!CONFIGS[@]}"; do
 
     if [ "$PLATFORM_DEVICE_TYPE" = "ios-simulator" ]; then
         OUTPUT=$("$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     elif [ "$PLATFORM_DEVICE_TYPE" = "osx" ]; then
         OUTPUT=$("$SCRIPT_DIR/osx/measure_osx_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     elif [ "$PLATFORM_DEVICE_TYPE" = "maccatalyst" ]; then
         OUTPUT=$("$SCRIPT_DIR/maccatalyst/measure_maccatalyst_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     else
         OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     fi
     EXIT_CODE=$?
 
@@ -179,6 +185,11 @@ for i in "${!CONFIGS[@]}"; do
             FAILED=$((FAILED + 1))
         else
             echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  pkg=${APK_SIZE_MB}MB  build=${BUILD_TIME}ms"
+            # Report trace file if collected
+            TRACE_PATH=$(echo "$OUTPUT" | grep "Trace saved to:" | sed 's/.*Trace saved to: //')
+            if [ -n "$TRACE_PATH" ]; then
+                echo "   📊 Trace: $TRACE_PATH"
+            fi
             echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$BUILD_TIME,$ITERATIONS" >> "$SUMMARY_FILE"
             PASSED=$((PASSED + 1))
         fi

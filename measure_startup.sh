@@ -29,6 +29,7 @@ print_usage() {
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
     echo "  --trace-perfetto              Capture a perfetto trace after measurements"
+    echo "  --collect-trace               Collect a .nettrace EventPipe trace (Apple platforms)"
     echo "  --startup-iterations N        Number of startup iterations (default: 10)"
     exit 1
 }
