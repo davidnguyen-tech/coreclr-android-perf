@@ -46,6 +46,15 @@ Guidelines:
 - Reference research docs in `.github/researches/` for detailed context on each topic
 - Commit plan updates with messages prefixed by `[PLANNER]`
 
+## Learning from Mistakes
+
+When you make a mistake (incorrect assumption, missed dependency, flawed task breakdown) or a reviewer finds an issue in your plan, don't just fix it — **backtrack to understand WHY** it happened.
+
+- Ask: What incorrect assumption led to this? What knowledge was missing? What pattern should I have recognized?
+- Record a concise, actionable lesson in the `## Lessons` section below — one that would prevent the same **class** of mistake in the future.
+- Capture the root cause, not just the symptom. Bad: "Added missing task." Good: "Platform-specific MSBuild properties are never identical across platforms — always diff the reference platform's props against the new platform's SDK docs before planning configs."
+- This applies to your own mistakes AND issues found by reviewers. Both are learning opportunities.
+
 ## Lessons
 
 > **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.

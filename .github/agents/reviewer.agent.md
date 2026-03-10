@@ -74,6 +74,15 @@ If the environment isn't fully set up (no SDK, no workloads), run what you can (
 - If no issues found, approve with `gh pr review <number> --approve --body "LGTM — no issues found"`
 - If issues found, request changes with `gh pr review <number> --request-changes --body "..."` and list all findings
 
+## Learning from Mistakes
+
+When you make a mistake (missed a real bug, flagged a false positive, incorrect platform assumption) or your review feedback is challenged, don't just move on — **backtrack to understand WHY** it happened.
+
+- Ask: What incorrect assumption led to this? What knowledge was missing? What pattern should I have recognized?
+- Record a concise, actionable lesson in the `## Lessons` section below — one that would prevent the same **class** of mistake in the future.
+- Capture the root cause, not just the symptom. Bad: "Missed the bug." Good: "Always trace shell variable assignments through `init.sh` sourcing before assuming a variable is unset — platform vars are set dynamically via `resolve_platform_config()`."
+- This applies to your own mistakes AND to cases where your review feedback was wrong. Both are learning opportunities.
+
 ## Lessons
 
 > **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.
