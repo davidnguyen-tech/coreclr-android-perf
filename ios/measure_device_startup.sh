@@ -214,18 +214,28 @@ else
 fi
 
 # Get device info for display
-DEVICE_INFO=$(xcrun devicectl list devices --json-output /dev/stdout 2>/dev/null | python3 -c "
+info_json=$(mktemp /tmp/devicectl_info.XXXXXX.json)
+xcrun devicectl list devices --json-output "$info_json" >/dev/null 2>&1
+# Parse the device info from the JSON file, filtering by DEVICE_UDID
+DEVICE_INFO=$(python3 -c "
 import json, sys
-udid = sys.argv[1]
-data = json.load(sys.stdin)
-for d in data.get('result', {}).get('devices', []):
-    if d.get('identifier') == udid:
-        name = d.get('deviceProperties', {}).get('name', 'Unknown')
-        os_ver = d.get('deviceProperties', {}).get('osVersionNumber', 'Unknown')
-        print(f'{name} (iOS {os_ver})')
-        sys.exit(0)
-print('Unknown Device')
-" "$DEVICE_UDID" 2>/dev/null)
+try:
+    data = json.load(open('$info_json'))
+    devices = data.get('result', {}).get('devices', [])
+    for d in devices:
+        if d.get('identifier', '') == '$DEVICE_UDID':
+            dp = d.get('deviceProperties', {})
+            hw = d.get('hardwareProperties', {})
+            name = dp.get('name', 'Unknown')
+            model = hw.get('marketingName', hw.get('productType', 'Unknown'))
+            version = dp.get('osVersionNumber', 'Unknown')
+            print(f'{name} ({model}, iOS {version})')
+            sys.exit(0)
+    print('Unknown Device')
+except Exception:
+    print('Unknown Device')
+" 2>/dev/null)
+rm -f "$info_json"
 echo "Device: $DEVICE_INFO ($DEVICE_UDID)"
 
 # ---------------------------------------------------------------------------

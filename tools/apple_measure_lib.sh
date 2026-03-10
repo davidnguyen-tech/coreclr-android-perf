@@ -531,7 +531,7 @@ get_connected_device_udid() {
     json_file=$(mktemp /tmp/devicectl_devices.XXXXXX.json)
     trap "rm -f '$json_file'" RETURN
 
-    xcrun devicectl list devices --json-output "$json_file" 2>/dev/null
+    xcrun devicectl list devices --json-output "$json_file" >/dev/null 2>&1
 
     local udid
     udid=$(python3 -c "
