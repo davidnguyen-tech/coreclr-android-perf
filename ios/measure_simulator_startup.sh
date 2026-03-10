@@ -1,16 +1,17 @@
 #!/bin/bash
 
-# Measures iOS Simulator startup time using wall-clock timing.
+# Measures iOS Simulator startup time using OS log event timing.
 #
-# This script bypasses the dotnet/performance test.py (which only supports
-# physical iOS devices with hardcoded --target ios-device and sudo log collect
-# --device) and uses xcrun simctl for simulator-based measurement.
+# This script measures iOS Simulator app startup by launching the app via
+# `xcrun simctl launch` and monitoring `log stream` for the first runtime
+# log event emitted by the app process. This captures the startup pipeline:
+# process creation, dyld loading, runtime initialization, and framework setup.
 #
-# Startup time is measured as the wall-clock duration of `xcrun simctl launch`,
-# which returns after the app process has started. This is a proxy for process
-# startup time — it does not measure time-to-interactive.
+# The script bypasses dotnet/performance's test.py (which only supports
+# physical iOS devices) and uses direct simulator interaction.
 
 source "$(dirname "$0")/../init.sh"
+source "$SCRIPT_DIR/tools/apple_measure_lib.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites
@@ -36,7 +37,7 @@ fi
 print_usage() {
     echo "Usage: $0 <app-name> <build-config> [options]"
     echo ""
-    echo "Measures iOS Simulator startup time using wall-clock timing."
+    echo "Measures iOS Simulator startup time using OS log event timing."
     echo ""
     echo "Apps:     dotnet-new-ios, dotnet-new-maui, dotnet-new-maui-samplecontent"
     echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R_COMP, R2R_COMP_PGO"
@@ -358,11 +359,25 @@ fi
 echo "Bundle ID: $BUNDLE_ID"
 
 # ---------------------------------------------------------------------------
+# Extract CFBundleExecutable for log stream filtering
+# ---------------------------------------------------------------------------
+EXECUTABLE_NAME=""
+if [ -f "$PLIST_PATH" ]; then
+    EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST_PATH" 2>/dev/null || true)
+fi
+if [ -z "$EXECUTABLE_NAME" ]; then
+    EXECUTABLE_NAME=$(basename "$APP_BUNDLE" .app)
+    echo "Warning: Could not read CFBundleExecutable, using fallback: $EXECUTABLE_NAME"
+fi
+echo "Executable: $EXECUTABLE_NAME"
+
+# ---------------------------------------------------------------------------
 # Cleanup function
 # ---------------------------------------------------------------------------
 cleanup() {
     echo ""
     echo "--- Cleaning up ---"
+    stop_log_stream
     xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
     xcrun simctl uninstall "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
 }
@@ -392,22 +407,37 @@ for ((i = 1; i <= ITERATIONS; i++)); do
         continue
     fi
 
-    # Measure launch time using python3 for sub-millisecond precision
-    # (macOS date does not support %N for nanoseconds)
-    START_NS=$(python3 -c "import time; print(time.time_ns())")
+    # Start log stream BEFORE launching the app
+    start_log_stream "process == \"$EXECUTABLE_NAME\""
 
+    # Capture start timestamp
+    START_NS=$(get_timestamp_ns)
+
+    # Launch the app
     xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID" > /dev/null 2>&1
     LAUNCH_RESULT=$?
 
-    END_NS=$(python3 -c "import time; print(time.time_ns())")
-
     if [ $LAUNCH_RESULT -ne 0 ]; then
+        stop_log_stream
         echo "  [$i/$ITERATIONS] FAILED — simctl launch returned $LAUNCH_RESULT"
         FAILED_COUNT=$((FAILED_COUNT + 1))
         continue
     fi
 
-    ELAPSED_MS=$(python3 -c "print(f'{($END_NS - $START_NS) / 1_000_000:.2f}')")
+    # Wait for the app's first log event (indicates runtime initialization)
+    if ! wait_for_log_event "$EXECUTABLE_NAME" 30; then
+        END_NS=$(get_timestamp_ns)
+        stop_log_stream
+        echo "  [$i/$ITERATIONS] FAILED — no log events within 30s"
+        xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        continue
+    fi
+
+    END_NS=$(get_timestamp_ns)
+    stop_log_stream
+
+    ELAPSED_MS=$(elapsed_ms "$START_NS" "$END_NS")
     TIMES+=("$ELAPSED_MS")
 
     echo "  [$i/$ITERATIONS] ${ELAPSED_MS} ms"
@@ -429,25 +459,8 @@ if [ ${#TIMES[@]} -eq 0 ]; then
     exit 1
 fi
 
-# Use python3 for reliable statistics computation
-STATS=$(python3 << PYEOF
-import statistics
-times = [${TIMES[0]}$(printf ', %s' "${TIMES[@]:1}")]
-times.sort()
-n = len(times)
-avg = statistics.mean(times)
-median = statistics.median(times)
-min_t = min(times)
-max_t = max(times)
-stdev = statistics.stdev(times) if n > 1 else 0.0
-print(f'{avg:.2f}')
-print(f'{median:.2f}')
-print(f'{min_t:.2f}')
-print(f'{max_t:.2f}')
-print(f'{stdev:.2f}')
-print(f'{n}')
-PYEOF
-)
+# Use shared library for reliable statistics computation
+STATS=$(compute_stats "${TIMES[@]}")
 
 AVG=$(echo "$STATS" | sed -n '1p')
 MEDIAN=$(echo "$STATS" | sed -n '2p')
@@ -471,25 +484,16 @@ echo "  StdDev: ${STDEV} ms"
 echo ""
 
 # Output parseable summary line compatible with measure_all.sh parsing
-# Format: Generic Startup | <avg> | <min> | <max>
-echo "Generic Startup | ${AVG} | ${MIN} | ${MAX}"
-echo "APP size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
+print_measurement_summary "$AVG" "$MIN" "$MAX" "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES"
 
 # ---------------------------------------------------------------------------
 # Save detailed results to CSV
 # ---------------------------------------------------------------------------
 mkdir -p "$RESULTS_DIR"
 RESULT_FILE="$RESULTS_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_simulator.csv"
-
-{
-    echo "iteration,time_ms"
-    for ((idx = 0; idx < ${#TIMES[@]}; idx++)); do
-        echo "$((idx + 1)),${TIMES[$idx]}"
-    done
-    echo ""
-    echo "# summary: avg_ms,median_ms,min_ms,max_ms,stdev_ms,count,app,config,simulator,pkg_size_mb,pkg_size_bytes"
-    echo "$AVG,$MEDIAN,$MIN,$MAX,$STDEV,$COUNT,$SAMPLE_APP,$BUILD_CONFIG,$SIM_NAME_RESOLVED,$PACKAGE_SIZE_MB,$PACKAGE_SIZE_BYTES"
-} > "$RESULT_FILE"
+save_results_csv "$RESULT_FILE" "$SAMPLE_APP" "$BUILD_CONFIG" "ios-simulator" \
+    "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES" \
+    "$AVG" "$MEDIAN" "$MIN" "$MAX" "$STDEV" "$COUNT" "${TIMES[@]}"
 
 echo ""
 echo "Results saved to: $RESULT_FILE"
