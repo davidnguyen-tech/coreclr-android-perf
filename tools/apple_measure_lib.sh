@@ -524,3 +524,143 @@ save_results_csv() {
         echo "$avg,$median,$min_val,$max_val,$stdev,$count,$sample_app,$build_config,$platform,$size_mb,$size_bytes"
     } > "$output_file"
 }
+
+# =============================================================================
+# .nettrace trace collection helpers
+# =============================================================================
+
+# Default EventPipe providers for startup analysis.
+# - Microsoft-Windows-DotNETRuntime with JIT, Loader, GC, R2R, TypeLoad events
+# - Microsoft-DotNETCore-SampleProfiler for CPU sampling
+NETTRACE_PROVIDERS="Microsoft-Windows-DotNETRuntime:0x4c14fccbd:5,Microsoft-DotNETCore-SampleProfiler:0x0:5"
+
+# Set up EventPipe environment variables for trace collection.
+# These are designed for the "simple" approach: env vars tell the runtime to
+# write a .nettrace file on startup without needing dotnet-trace or dsrouter.
+#
+# Arguments:
+#   $1 - output_path  Where to write the .nettrace file
+#   $2 - providers    Provider config string (default: $NETTRACE_PROVIDERS)
+#
+# Sets the following environment variables in the CALLING shell:
+#   DOTNET_EnableEventPipe=1
+#   DOTNET_EventPipeOutputPath=<output_path>
+#   DOTNET_EventPipeOutputStreaming=1
+#   DOTNET_EventPipeConfig=<providers>
+#
+# Usage:
+#   setup_eventpipe_env "/tmp/trace.nettrace"
+#   # ... launch app with these env vars ...
+#   unset_eventpipe_env
+setup_eventpipe_env() {
+    local output_path="$1"
+    local providers="${2:-$NETTRACE_PROVIDERS}"
+
+    export DOTNET_EnableEventPipe=1
+    export DOTNET_EventPipeOutputPath="$output_path"
+    export DOTNET_EventPipeOutputStreaming=1
+    export DOTNET_EventPipeConfig="$providers"
+}
+
+# Unset EventPipe environment variables after trace collection.
+# Safe to call even if setup_eventpipe_env was never called.
+# Usage: unset_eventpipe_env
+unset_eventpipe_env() {
+    unset DOTNET_EnableEventPipe
+    unset DOTNET_EventPipeOutputPath
+    unset DOTNET_EventPipeOutputStreaming
+    unset DOTNET_EventPipeConfig
+}
+
+# Collect the .nettrace file after an app run.
+# Searches for .nettrace files at the expected path, and if not found,
+# searches common locations (app data container, /tmp, etc.).
+#
+# Arguments:
+#   $1 - expected_path  Where the trace should have been written
+#   $2 - dest_path      Where to copy the trace file
+#   $3 - search_dirs    (Optional) Space-separated list of additional dirs to search
+#
+# Returns:
+#   0 - Trace file found and copied successfully
+#   1 - No trace file found
+#
+# Usage:
+#   collect_nettrace "/tmp/trace.nettrace" "$RESULTS_DIR/app_config.nettrace"
+collect_nettrace() {
+    local expected_path="$1"
+    local dest_path="$2"
+    local search_dirs="${3:-}"
+
+    # First, check the expected path
+    if [ -f "$expected_path" ]; then
+        local file_size
+        file_size=$(wc -c < "$expected_path" | tr -d ' ')
+        if [ "$file_size" -gt 1000 ]; then
+            cp "$expected_path" "$dest_path"
+            echo "Trace collected: $dest_path ($file_size bytes)"
+            rm -f "$expected_path"
+            return 0
+        else
+            echo "Warning: Trace file at $expected_path is suspiciously small ($file_size bytes)." >&2
+        fi
+    fi
+
+    # Search additional directories for .nettrace files matching the expected name pattern.
+    # Derive a scoped glob from the expected filename (strip PID suffix) to avoid matching
+    # stale traces from previous runs.
+    local expected_basename
+    expected_basename=$(basename "$expected_path" .nettrace)
+    # Strip trailing _<PID> (digits after last underscore) to get the app/config prefix
+    local name_pattern
+    name_pattern=$(echo "$expected_basename" | sed 's/_[0-9]*$//')
+
+    for dir in $search_dirs; do
+        if [ -d "$dir" ]; then
+            local found
+            found=$(find "$dir" -name "${name_pattern}*.nettrace" -size +1k 2>/dev/null | head -1)
+            if [ -n "$found" ]; then
+                local file_size
+                file_size=$(wc -c < "$found" | tr -d ' ')
+                cp "$found" "$dest_path"
+                echo "Trace collected from $found: $dest_path ($file_size bytes)"
+                rm -f "$found"
+                return 0
+            fi
+        fi
+    done
+
+    echo "Warning: No .nettrace file found at expected path or search directories." >&2
+    return 1
+}
+
+# Build the SIMCTL_CHILD_ prefixed env var exports for iOS Simulator trace collection.
+# The iOS Simulator passes environment variables to launched apps when they
+# have the SIMCTL_CHILD_ prefix.
+#
+# Arguments:
+#   $1 - output_path  Where to write the .nettrace file (inside simulator container)
+#   $2 - providers    Provider config string (default: $NETTRACE_PROVIDERS)
+#
+# Usage:
+#   setup_simctl_eventpipe_env "/tmp/trace.nettrace"
+#   xcrun simctl launch ...
+#   unset_simctl_eventpipe_env
+setup_simctl_eventpipe_env() {
+    local output_path="$1"
+    local providers="${2:-$NETTRACE_PROVIDERS}"
+
+    export SIMCTL_CHILD_DOTNET_EnableEventPipe=1
+    export SIMCTL_CHILD_DOTNET_EventPipeOutputPath="$output_path"
+    export SIMCTL_CHILD_DOTNET_EventPipeOutputStreaming=1
+    export SIMCTL_CHILD_DOTNET_EventPipeConfig="$providers"
+}
+
+# Unset SIMCTL_CHILD_ prefixed EventPipe environment variables.
+# Usage: unset_simctl_eventpipe_env
+unset_simctl_eventpipe_env() {
+    unset SIMCTL_CHILD_DOTNET_EnableEventPipe
+    unset SIMCTL_CHILD_DOTNET_EventPipeOutputPath
+    unset SIMCTL_CHILD_DOTNET_EventPipeOutputStreaming
+    unset SIMCTL_CHILD_DOTNET_EventPipeConfig
+}
