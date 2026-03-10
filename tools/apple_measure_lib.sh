@@ -7,11 +7,14 @@
 #   - osx/measure_osx_startup.sh
 #   - maccatalyst/measure_maccatalyst_startup.sh
 #   - ios/measure_simulator_startup.sh
+#   - ios/measure_device_startup.sh
 #
 # It provides:
 #   - High-resolution timing helpers (nanosecond timestamps, elapsed ms)
 #   - Window-appearance detection for macOS / Mac Catalyst (via AppleScript)
 #   - Log stream event detection for iOS Simulator
+#   - Post-hoc device log collection + SpringBoard Watchdog timing for iOS devices
+#   - Device management helpers (install, launch, terminate, uninstall)
 #   - Process detection (wait for process by name)
 #   - Statistics computation (avg, median, min, max, stdev)
 #   - Build time measurement (binlog parsing via dotnet/performance)
@@ -235,6 +238,448 @@ sys.exit(1)
     done
 
     return 1  # timeout
+}
+
+# =============================================================================
+# iOS Device: startup timing via sudo log collect --device
+# =============================================================================
+# Uses post-hoc log collection to extract SpringBoard Watchdog timing events,
+# following the same approach as dotnet/performance's runner.py.
+#
+# Background:
+#   `log stream --device` does NOT exist — the --device flag is only valid on
+#   `log collect`. Physical device logs are not accessible via the host's
+#   `log stream` command (which only reads the local unified log).
+#
+# Flow (per iteration):
+#   1. Launch the app via xcrun devicectl
+#   2. Wait for the app to fully start (sleep 5s)
+#   3. Collect device logs post-hoc: sudo log collect --device --start <ts>
+#   4. Parse the .logarchive for SpringBoard Watchdog events
+#   5. Extract time-to-main and time-to-first-draw from event timestamps
+#
+# Requires: passwordless sudo configured for `log collect --device`.
+#
+# See: .github/researches/ios-device-log-streaming.md for full analysis.
+
+# Collect device logs for a time window into a .logarchive file.
+# Requires: passwordless sudo configured for '/usr/bin/log'.
+#
+# Arguments:
+#   $1 - device_udid      Target device UDID (uses --device-udid for precise targeting)
+#   $2 - start_timestamp  Start time in "YYYY-MM-DD HH:MM:SS±ZZZZ" format
+#   $3 - output_path      Path for the output .logarchive (directory)
+#
+# Returns:
+#   0 - Collection succeeded
+#   1 - Collection failed
+collect_device_logs() {
+    local device_udid="$1"
+    local start_timestamp="$2"
+    local output_path="$3"
+
+    if [ -z "$device_udid" ] || [ -z "$start_timestamp" ] || [ -z "$output_path" ]; then
+        echo "Error: collect_device_logs requires device_udid, start_timestamp, and output_path." >&2
+        return 1
+    fi
+
+    # Remove previous logarchive at this path if it exists
+    rm -rf "$output_path"
+
+    sudo log collect --device-udid "$device_udid" \
+        --start "$start_timestamp" \
+        --output "$output_path" 2>&1
+
+    if [ $? -ne 0 ] || [ ! -d "$output_path" ]; then
+        echo "Error: sudo log collect --device-udid failed." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Parse SpringBoard Watchdog events from a .logarchive file.
+# Extracts time-to-main and time-to-first-draw for a given bundle ID.
+#
+# SpringBoard emits 4 Watchdog events during app startup:
+#   1. "Now monitoring resource allowance of 20.00s" — OS starts watching main()
+#   2. "Stopped monitoring."                         — App reached main()
+#   3. "Now monitoring resource allowance of N.NNs"  — OS starts watching first draw
+#   4. "Stopped monitoring."                         — App drew first frame
+#
+# Time-to-main    = Event 2 timestamp - Event 1 timestamp
+# Time-to-draw    = Event 4 timestamp - Event 3 timestamp
+# Total startup   = time-to-main + time-to-draw
+#
+# Arguments:
+#   $1 - logarchive_path  Path to the .logarchive directory
+#   $2 - bundle_id        App bundle identifier (e.g., "com.companyname.myapp")
+#
+# Output (stdout, 3 lines on success):
+#   Line 1: total_ms      (time-to-main + time-to-first-draw)
+#   Line 2: time_to_main_ms
+#   Line 3: time_to_first_draw_ms
+#
+# Returns:
+#   0 - Parsing succeeded (3 lines printed)
+#   1 - Parsing failed (wrong number of events, parse error, etc.)
+parse_watchdog_timing() {
+    local logarchive_path="$1"
+    local bundle_id="$2"
+
+    if [ -z "$logarchive_path" ] || [ ! -d "$logarchive_path" ]; then
+        echo "Error: logarchive path '$logarchive_path' does not exist." >&2
+        return 1
+    fi
+    if [ -z "$bundle_id" ]; then
+        echo "Error: bundle_id is required for Watchdog event parsing." >&2
+        return 1
+    fi
+
+    # Extract Watchdog events as ndjson
+    local events_json
+    events_json=$(log show \
+        --predicate '(process == "SpringBoard") && (category == "Watchdog")' \
+        --info --style ndjson \
+        "$logarchive_path" 2>/dev/null)
+
+    if [ -z "$events_json" ]; then
+        echo "Error: No SpringBoard Watchdog events found in logarchive." >&2
+        return 1
+    fi
+
+    # Parse with Python, following runner.py logic (lines 825-931)
+    python3 -c "
+import json, sys
+from datetime import datetime
+
+bundle_id = sys.argv[1]
+events = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        entry = json.loads(line)
+        msg = entry.get('eventMessage', '')
+        if bundle_id in msg and ('Now monitoring resource allowance' in msg or 'Stopped monitoring' in msg):
+            events.append(entry)
+    except (json.JSONDecodeError, KeyError):
+        continue
+
+if len(events) < 4:
+    print(f'ERROR: Expected 4 Watchdog events for {bundle_id}, got {len(events)}', file=sys.stderr)
+    if events:
+        for e in events:
+            print(f'  Event: {e.get(\"eventMessage\", \"?\")[:120]}', file=sys.stderr)
+    sys.exit(1)
+
+# Use the last 4 events (in case there are extras from previous runs)
+events = events[-4:]
+e0, e1, e2, e3 = events
+
+# Validate event sequence
+if 'Now monitoring resource allowance of 20.00s' not in e0.get('eventMessage', ''):
+    print(f'ERROR: Invalid first event (expected 20.00s monitor start): {e0.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+if 'Stopped monitoring' not in e1.get('eventMessage', ''):
+    print(f'ERROR: Invalid second event (expected Stopped monitoring): {e1.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+if 'Now monitoring resource allowance of' not in e2.get('eventMessage', ''):
+    print(f'ERROR: Invalid third event (expected monitor start): {e2.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+if 'Stopped monitoring' not in e3.get('eventMessage', ''):
+    print(f'ERROR: Invalid fourth event (expected Stopped monitoring): {e3.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+# Parse timestamps
+fmt = '%Y-%m-%d %H:%M:%S.%f%z'
+t0 = datetime.strptime(e0['timestamp'], fmt)
+t1 = datetime.strptime(e1['timestamp'], fmt)
+t2 = datetime.strptime(e2['timestamp'], fmt)
+t3 = datetime.strptime(e3['timestamp'], fmt)
+
+time_to_main_ms = (t1 - t0).total_seconds() * 1000
+time_to_first_draw_ms = (t3 - t2).total_seconds() * 1000
+total_ms = time_to_main_ms + time_to_first_draw_ms
+
+print(f'{total_ms:.2f}')
+print(f'{time_to_main_ms:.2f}')
+print(f'{time_to_first_draw_ms:.2f}')
+" "$bundle_id" <<< "$events_json"
+}
+
+# Extract the device-side timestamp of the last Watchdog event from a logarchive.
+# Used by the warmup iteration to establish a device time reference, avoiding
+# host-device clock drift issues (same technique as runner.py lines 859-863).
+#
+# Arguments:
+#   $1 - logarchive_path  Path to the .logarchive directory
+#   $2 - bundle_id        App bundle identifier
+#
+# Output (stdout): timestamp string in "YYYY-MM-DD HH:MM:SS.ffffff±ZZZZ" format
+#                  (empty if no events found)
+#
+# Returns:
+#   0 - Timestamp found
+#   1 - No matching events
+get_last_watchdog_timestamp() {
+    local logarchive_path="$1"
+    local bundle_id="$2"
+
+    if [ -z "$logarchive_path" ] || [ ! -d "$logarchive_path" ]; then
+        return 1
+    fi
+
+    local events_json
+    events_json=$(log show \
+        --predicate '(process == "SpringBoard") && (category == "Watchdog")' \
+        --info --style ndjson \
+        "$logarchive_path" 2>/dev/null)
+
+    if [ -z "$events_json" ]; then
+        return 1
+    fi
+
+    python3 -c "
+import json, sys
+
+bundle_id = sys.argv[1]
+last_ts = None
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        entry = json.loads(line)
+        msg = entry.get('eventMessage', '')
+        if bundle_id in msg and ('Now monitoring resource allowance' in msg or 'Stopped monitoring' in msg):
+            last_ts = entry.get('timestamp', '')
+    except (json.JSONDecodeError, KeyError):
+        continue
+
+if last_ts:
+    print(last_ts)
+else:
+    sys.exit(1)
+" "$bundle_id" <<< "$events_json"
+}
+
+# Advance a device-side Watchdog timestamp by N seconds.
+# Used to compute the --start argument for the next iteration's log collect,
+# avoiding overlap with events from the current iteration.
+#
+# Arguments:
+#   $1 - timestamp  Device-side timestamp (e.g., "2024-01-15 10:30:45.123456+0000")
+#   $2 - seconds    Seconds to add (default: 1)
+#
+# Output (stdout): adjusted timestamp in "YYYY-MM-DD HH:MM:SS±HHMM" format
+#                  (suitable for `sudo log collect --start`)
+advance_timestamp() {
+    local timestamp="$1"
+    local seconds="${2:-1}"
+
+    python3 -c "
+from datetime import datetime, timedelta
+import sys
+
+ts_str = sys.argv[1]
+delta_s = int(sys.argv[2])
+
+# Parse device timestamp (format: 'YYYY-MM-DD HH:MM:SS.ffffff±ZZZZ')
+fmt = '%Y-%m-%d %H:%M:%S.%f%z'
+dt = datetime.strptime(ts_str, fmt)
+dt = dt + timedelta(seconds=delta_s)
+
+# Output in the format expected by 'log collect --start'
+print(dt.strftime('%Y-%m-%d %H:%M:%S%z'))
+" "$timestamp" "$seconds"
+}
+
+# =============================================================================
+# iOS Device: device management helpers (xcrun devicectl)
+# =============================================================================
+
+# Find the UDID of a connected physical iOS device.
+# Uses `xcrun devicectl list devices` (Xcode 15+) with JSON output.
+#
+# If multiple devices are connected, returns the first one.
+# If no device is connected, returns empty string.
+#
+# Falls back to `xcrun xctrace list devices` if `devicectl` is not available
+# (older Xcode versions).
+#
+# Arguments: none
+#
+# Output: UDID string on stdout (or empty)
+#
+# Usage:
+#   DEVICE_UDID=$(get_connected_device_udid)
+#   if [ -z "$DEVICE_UDID" ]; then echo "No device"; fi
+get_connected_device_udid() {
+    # Try xcrun devicectl first (Xcode 15+)
+    if xcrun devicectl list devices --json-output /dev/stdout > /dev/null 2>&1; then
+        local udid
+        udid=$(xcrun devicectl list devices --json-output /dev/stdout 2>/dev/null | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    devices = data.get('result', {}).get('devices', [])
+    for d in devices:
+        conn = d.get('connectionProperties', {})
+        # Only consider devices that are connected via wired, localNetwork, or wifi
+        if conn.get('transportType', '') in ('wired', 'localNetwork', 'wifi'):
+            udid = d.get('identifier', '')
+            if udid:
+                print(udid)
+                sys.exit(0)
+except (json.JSONDecodeError, KeyError, TypeError):
+    pass
+" 2>/dev/null)
+        if [ -n "$udid" ]; then
+            echo "$udid"
+            return 0
+        fi
+    fi
+
+    # Fallback: xcrun xctrace list devices (older Xcode)
+    if command -v xcrun &> /dev/null; then
+        local udid
+        udid=$(xcrun xctrace list devices 2>/dev/null | grep -v "Simulator" | grep -E '\([0-9A-Fa-f-]+\)' | head -1 | sed 's/.*(\([0-9A-Fa-f-]*\)).*/\1/')
+        if [ -n "$udid" ]; then
+            echo "$udid"
+            return 0
+        fi
+    fi
+
+    return 0  # no device found — return empty (caller checks)
+}
+
+# Install an .app bundle on a physical iOS device.
+# Uses `xcrun devicectl device install app` (Xcode 15+).
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - app_path     Path to the .app bundle directory
+#
+# Returns:
+#   0 - App installed successfully
+#   1 - Installation failed
+#
+# Usage: install_app_on_device "$DEVICE_UDID" "$APP_BUNDLE"
+install_app_on_device() {
+    local device_udid="$1"
+    local app_path="$2"
+
+    if [ -z "$device_udid" ]; then
+        echo "Error: device UDID is required." >&2
+        return 1
+    fi
+    if [ -z "$app_path" ] || [ ! -d "$app_path" ]; then
+        echo "Error: app bundle path '$app_path' does not exist or is not a directory." >&2
+        return 1
+    fi
+
+    xcrun devicectl device install app --device "$device_udid" "$app_path" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Error: Failed to install app on device $device_udid (exit code $exit_code)." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Launch an app on a physical iOS device.
+# Uses `xcrun devicectl device process launch` (Xcode 15+).
+# Terminates any existing instance of the app before launching.
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - bundle_id    Bundle identifier of the app (e.g., "com.companyname.myapp")
+#
+# Returns:
+#   0 - App launched successfully
+#   1 - Launch failed
+#
+# Usage: launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+launch_app_on_device() {
+    local device_udid="$1"
+    local bundle_id="$2"
+
+    if [ -z "$device_udid" ]; then
+        echo "Error: device UDID is required." >&2
+        return 1
+    fi
+    if [ -z "$bundle_id" ]; then
+        echo "Error: bundle ID is required." >&2
+        return 1
+    fi
+
+    xcrun devicectl device process launch --terminate-existing --device "$device_udid" "$bundle_id" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Error: Failed to launch $bundle_id on device $device_udid (exit code $exit_code)." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Terminate a running app on a physical iOS device.
+# Best-effort — does not fail if the app is not running.
+#
+# NOTE: `xcrun devicectl device process terminate` requires --pid, not a
+# bundle ID. Since we don't always have the PID, this function is a
+# best-effort no-op. The actual termination happens via the
+# --terminate-existing flag on `launch_app_on_device()`, which kills any
+# existing instance of the app before launching a new one.
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - bundle_id    Bundle identifier of the app
+#
+# Returns:
+#   0 - Always (best-effort cleanup)
+#
+# Usage: terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+terminate_app_on_device() {
+    local device_udid="$1"
+    local bundle_id="$2"
+
+    if [ -z "$device_udid" ] || [ -z "$bundle_id" ]; then
+        return 0  # nothing to do
+    fi
+
+    # Best-effort: try to terminate. This may fail because devicectl
+    # process terminate requires --pid, but we attempt it anyway in case
+    # future devicectl versions support bundle ID termination.
+    # The primary termination mechanism is --terminate-existing on launch.
+    xcrun devicectl device process terminate --device "$device_udid" "$bundle_id" 2>/dev/null || true
+    return 0
+}
+
+# Uninstall an app from a physical iOS device.
+# Best-effort cleanup — does not fail if the app is not installed.
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - bundle_id    Bundle identifier of the app
+#
+# Returns:
+#   0 - Always (best-effort cleanup)
+#
+# Usage: uninstall_app_from_device "$DEVICE_UDID" "$BUNDLE_ID"
+uninstall_app_from_device() {
+    local device_udid="$1"
+    local bundle_id="$2"
+
+    if [ -z "$device_udid" ] || [ -z "$bundle_id" ]; then
+        return 0  # nothing to do
+    fi
+
+    xcrun devicectl device uninstall app --device "$device_udid" "$bundle_id" 2>/dev/null || true
+    return 0
 }
 
 # =============================================================================
