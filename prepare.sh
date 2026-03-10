@@ -107,8 +107,8 @@ if [ -d "$APPS_DIR" ]; then
 fi
 mkdir -p "$APPS_DIR"
 rm -f "$VERSIONS_LOG"
-# Clean tool binaries (keep dotnet-install.sh)
-find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "dotnet-install.sh" -exec rm -f {} \; 2>/dev/null
+# Clean tool binaries (keep all .sh source files — scripts are source code, not downloaded tools)
+find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "*.sh" -exec rm -f {} \; 2>/dev/null
 find "$TOOLS_DIR" -maxdepth 1 -type d ! -path "$TOOLS_DIR" -exec rm -rf {} \; 2>/dev/null
 
 mkdir -p "$LOCAL_PACKAGES"
