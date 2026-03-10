@@ -266,9 +266,13 @@ sys.exit(1)
 # Requires: passwordless sudo configured for '/usr/bin/log'.
 #
 # Arguments:
-#   $1 - device_udid      Target device UDID (uses --device-udid for precise targeting)
+#   $1 - device_udid      Target device UDID (reserved for future multi-device support)
 #   $2 - start_timestamp  Start time in "YYYY-MM-DD HH:MM:SS±ZZZZ" format
 #   $3 - output_path      Path for the output .logarchive (directory)
+#
+# Note: Uses --device (not --device-udid) because log collect expects hardware
+# UDIDs (00008020-...) while xcrun devicectl provides CoreDevice UUIDs.
+# --device targets the first connected device, matching runner.py's approach.
 #
 # Returns:
 #   0 - Collection succeeded
@@ -287,7 +291,7 @@ collect_device_logs() {
     rm -rf "$output_path"
 
     local collect_output
-    collect_output=$(sudo log collect --device-udid "$device_udid" \
+    collect_output=$(sudo log collect --device \
         --start "$start_timestamp" \
         --output "$output_path" 2>&1)
     local collect_exit=$?
