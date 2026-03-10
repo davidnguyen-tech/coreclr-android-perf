@@ -291,6 +291,9 @@ if [ "$SKIP_BUILD" = false ]; then
 
     mkdir -p "$BUILD_DIR"
 
+    # Capture wall-clock build time as a fallback
+    BUILD_START_NS=$(get_timestamp_ns)
+
     ${LOCAL_DOTNET} build -c Release \
         -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
         -tl:off \
@@ -301,6 +304,19 @@ if [ "$SKIP_BUILD" = false ]; then
     if [ $? -ne 0 ]; then
         echo "Error: Build failed."
         exit 1
+    fi
+
+    BUILD_END_NS=$(get_timestamp_ns)
+    WALLCLOCK_BUILD_MS=$(elapsed_ms "$BUILD_START_NS" "$BUILD_END_NS")
+
+    # Try detailed build time parsing from the binlog
+    BINLOG_PATH="$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_sim.binlog"
+    BUILDTIME_OUTPUT=$(run_buildtime_parser "$BINLOG_PATH" "${SAMPLE_APP}_${BUILD_CONFIG}_sim" 2>&1) || true
+    if echo "$BUILDTIME_OUTPUT" | grep -q "Build time:"; then
+        echo "$BUILDTIME_OUTPUT"
+    else
+        # Fall back to wall-clock build time
+        echo "Build time: ${WALLCLOCK_BUILD_MS} ms"
     fi
 else
     echo ""
