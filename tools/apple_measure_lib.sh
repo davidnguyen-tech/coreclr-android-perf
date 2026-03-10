@@ -524,13 +524,20 @@ print(dt.strftime('%Y-%m-%d %H:%M:%S%z'))
 #   DEVICE_UDID=$(get_connected_device_udid)
 #   if [ -z "$DEVICE_UDID" ]; then echo "No device"; fi
 get_connected_device_udid() {
-    # Try xcrun devicectl first (Xcode 15+)
-    if xcrun devicectl list devices --json-output /dev/stdout > /dev/null 2>&1; then
-        local udid
-        udid=$(xcrun devicectl list devices --json-output /dev/stdout 2>/dev/null | python3 -c "
+    # Use a temp file for JSON output — piping via /dev/stdout produces mixed
+    # text+JSON that python's json.load(sys.stdin) cannot parse.
+    # See: .github/researches/ios-device-udid-mismatch.md
+    local json_file
+    json_file=$(mktemp /tmp/devicectl_devices.XXXXXX.json)
+    trap "rm -f '$json_file'" RETURN
+
+    xcrun devicectl list devices --json-output "$json_file" 2>/dev/null
+
+    local udid
+    udid=$(python3 -c "
 import json, sys
 try:
-    data = json.load(sys.stdin)
+    data = json.load(open('$json_file'))
     devices = data.get('result', {}).get('devices', [])
     for d in devices:
         conn = d.get('connectionProperties', {})
@@ -549,26 +556,19 @@ try:
             if udid:
                 print(udid)
                 sys.exit(0)
-except (json.JSONDecodeError, KeyError, TypeError):
-    pass
+    sys.exit(1)
+except Exception as e:
+    print(f'Error parsing device list: {e}', file=sys.stderr)
+    sys.exit(1)
 " 2>/dev/null)
-        if [ -n "$udid" ]; then
-            echo "$udid"
-            return 0
-        fi
-    fi
 
-    # Fallback: xcrun xctrace list devices (older Xcode)
-    if command -v xcrun &> /dev/null; then
-        local udid
-        udid=$(xcrun xctrace list devices 2>/dev/null | grep -v "Simulator" | grep -E '\([0-9A-Fa-f-]+\)' | head -1 | sed 's/.*(\([0-9A-Fa-f-]*\)).*/\1/')
-        if [ -n "$udid" ]; then
-            echo "$udid"
-            return 0
-        fi
+    if [ -z "$udid" ]; then
+        echo "Error: No wired iOS device found." >&2
+        echo "  Ensure your iPhone is connected via USB and trusted." >&2
+        echo "  Verify with: xcrun devicectl list devices" >&2
+        return 1
     fi
-
-    return 0  # no device found — return empty (caller checks)
+    echo "$udid"
 }
 
 # Install an .app bundle on a physical iOS device.
