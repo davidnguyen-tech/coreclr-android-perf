@@ -99,13 +99,14 @@ Your context window is finite. Prevent overflow with these rules:
 
 ## Learning from Mistakes
 
-When an agent makes a mistake (build failure from wrong MSBuild property, incorrect platform assumption, broken script, etc.):
+When an agent makes a mistake (build failure, incorrect assumption, missed edge case) or a reviewer finds an issue, don't just fix it — **backtrack to understand WHY** it happened.
 
-1. **Identify the root cause** — what incorrect assumption or missing knowledge led to the error?
-2. **Append a one-line lesson** to the relevant `.github/agents/<agent>.agent.md` file under a `## Lessons` section at the bottom
-3. Keep lessons concise (one line each) and actionable — e.g., `- iOS uses MtouchProfiledAOT, not AndroidEnableProfiledAot, for profiled AOT`
+1. **Ask**: What incorrect assumption led to this? What knowledge was missing? What pattern should have been recognized?
+2. **Identify the root cause**, not just the symptom. Bad: "Fixed wrong property." Good: "iOS uses `MtouchProfiledAOT`, not `AndroidEnableProfiledAot` — platform-specific MSBuild properties are never interchangeable; always verify against the target platform's SDK docs."
+3. **Append a concise, actionable lesson** to the relevant `.github/agents/<agent>.agent.md` under `## Lessons` — one that prevents the same **class** of mistake in the future.
 4. Do NOT bloat agent files — only record mistakes that would realistically recur. Skip one-off typos.
-5. Commit the lesson update alongside the fix so it's never lost
+5. Commit the lesson update alongside the fix so it's never lost.
+6. This applies to ALL agents' mistakes AND to issues found by reviewers. Both are learning opportunities.
 
 ## Lessons
 
