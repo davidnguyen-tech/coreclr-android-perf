@@ -230,7 +230,10 @@ else
     fi
 
     # Find the built package
-    PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" | head -1)
+    PACKAGE_PATH=$(find "$APP_DIR/bin" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" -not -path "*/obj/*" 2>/dev/null | head -1)
+    if [ -z "$PACKAGE_PATH" ]; then
+        PACKAGE_PATH=$(find "$APP_DIR" -name "$PLATFORM_PACKAGE_GLOB" -path "*/Release/*" -not -path "*/obj/*" 2>/dev/null | head -1)
+    fi
     if [ -z "$PACKAGE_PATH" ]; then
         echo "Error: Could not find $PLATFORM_PACKAGE_LABEL package after build."
         exit 1
