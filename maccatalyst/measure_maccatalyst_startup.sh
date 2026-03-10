@@ -154,7 +154,7 @@ if [ "$SKIP_BUILD" = false ]; then
     echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) for maccatalyst ==="
 
     # Clean previous build artifacts
-    rm -rf "${APP_DIR:?}/bin"
+    rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
 
     mkdir -p "$BUILD_DIR"
 
@@ -203,7 +203,7 @@ fi
 PACKAGE_SIZE_KB=$(du -sk "$APP_BUNDLE" | cut -f1)
 PACKAGE_SIZE_BYTES=$((PACKAGE_SIZE_KB * 1024))
 PACKAGE_SIZE_MB=$(python3 -c "print(f'{$PACKAGE_SIZE_BYTES / 1048576:.2f}')")
-echo "APP size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
+echo "Package size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
 
 # ---------------------------------------------------------------------------
 # Extract app info from Info.plist
