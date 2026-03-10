@@ -68,8 +68,17 @@ generate_app() {
         exit 1
     fi
 
-    # For MAUI apps, restrict TargetFrameworks to the selected platform only
+    # Patch TFM to match the build system's PLATFORM_TFM.
+    # Template apps (ios, android, macos) generate csprojs with the SDK's default
+    # TFM (e.g. net10.0-ios) which may not match PLATFORM_TFM (e.g. net11.0-ios).
+    # MAUI apps have their own multi-TFM patching below, so skip them here.
     local csproj="$app_dir/$app_name.csproj"
+    if [ "$template" != "maui" ] && [ -f "$csproj" ]; then
+        sed -i '' "s|<TargetFramework>[^<]*</TargetFramework>|<TargetFramework>$PLATFORM_TFM</TargetFramework>|" "$csproj"
+        echo "Patched $app_name TFM to $PLATFORM_TFM"
+    fi
+
+    # For MAUI apps, restrict TargetFrameworks to the selected platform only
     if [ "$template" = "maui" ] && [ -f "$csproj" ]; then
         python3 - "$csproj" "$PLATFORM_TFM" << 'TFMEOF'
 import sys, re
