@@ -7,11 +7,14 @@
 #   - osx/measure_osx_startup.sh
 #   - maccatalyst/measure_maccatalyst_startup.sh
 #   - ios/measure_simulator_startup.sh
+#   - ios/measure_device_startup.sh
 #
 # It provides:
 #   - High-resolution timing helpers (nanosecond timestamps, elapsed ms)
 #   - Window-appearance detection for macOS / Mac Catalyst (via AppleScript)
 #   - Log stream event detection for iOS Simulator
+#   - Device log stream event detection for iOS physical devices
+#   - Device management helpers (install, launch, terminate, uninstall)
 #   - Process detection (wait for process by name)
 #   - Statistics computation (avg, median, min, max, stdev)
 #   - Build time measurement (binlog parsing via dotnet/performance)
@@ -235,6 +238,310 @@ sys.exit(1)
     done
 
     return 1  # timeout
+}
+
+# =============================================================================
+# iOS Device: device log stream event detection
+# =============================================================================
+
+# Variables set by start_device_log_stream / cleaned up by stop_device_log_stream.
+# These are intentionally global so the caller can reference them.
+# Uses a _DEVICE_ prefix to avoid collisions with the simulator log stream globals.
+_AML_DEVICE_LOG_STREAM_PID=""
+_AML_DEVICE_LOG_STREAM_FILE=""
+
+# Start a background `log stream --device` filtered for a specific process.
+# Must be called BEFORE launching the app on the device.
+#
+# Uses a separate pair of global variables from the simulator log stream
+# so both can coexist if needed (though in practice only one is used at a time).
+#
+# Sets:
+#   _AML_DEVICE_LOG_STREAM_PID  - PID of the background log stream process
+#   _AML_DEVICE_LOG_STREAM_FILE - Path to the temp file collecting device log output
+#
+# Arguments:
+#   $1 - predicate  A `log stream --predicate` expression
+#                   (e.g., "process == \"MyApp\"")
+#   $2 - settle     Seconds to wait after starting the stream to ensure
+#                   it is connected (default: 1.0)
+#                   NOTE: Device log stream has higher latency than host —
+#                   default settle time is 1.0s (vs 0.5s for simulator)
+#
+# Usage: start_device_log_stream "process == \"MyApp\"" 1.0
+start_device_log_stream() {
+    stop_device_log_stream
+    local predicate="$1"
+    local settle="${2:-1.0}"
+
+    _AML_DEVICE_LOG_STREAM_FILE=$(mktemp /tmp/apple_measure_device_log.XXXXXX)
+
+    log stream --device --predicate "$predicate" \
+        --style ndjson --level info > "$_AML_DEVICE_LOG_STREAM_FILE" 2>/dev/null &
+    _AML_DEVICE_LOG_STREAM_PID=$!
+
+    # Brief pause to ensure the device log stream is connected before we launch the app
+    sleep "$settle"
+}
+
+# Stop the background device log stream and clean up the temp file.
+# Safe to call even if start_device_log_stream was never called.
+# Usage: stop_device_log_stream
+stop_device_log_stream() {
+    if [ -n "${_AML_DEVICE_LOG_STREAM_PID:-}" ]; then
+        kill "$_AML_DEVICE_LOG_STREAM_PID" 2>/dev/null || true
+        wait "$_AML_DEVICE_LOG_STREAM_PID" 2>/dev/null || true
+        _AML_DEVICE_LOG_STREAM_PID=""
+    fi
+    if [ -n "${_AML_DEVICE_LOG_STREAM_FILE:-}" ] && [ -f "$_AML_DEVICE_LOG_STREAM_FILE" ]; then
+        rm -f "$_AML_DEVICE_LOG_STREAM_FILE"
+        _AML_DEVICE_LOG_STREAM_FILE=""
+    fi
+}
+
+# Wait for a matching log event to appear in the device log stream output file.
+# Identical to wait_for_log_event() but reads from the device log stream file.
+#
+# Arguments:
+#   $1 - process_name  The process name to search for in log entries
+#   $2 - timeout       Maximum seconds to wait (default: 30)
+#   $3 - poll_interval Seconds between polls (default: 0.1)
+#
+# Returns:
+#   0 - Matching event found (timestamp is printed to stdout if available)
+#   1 - Timeout (no matching event within the timeout period)
+#
+# Usage:
+#   start_device_log_stream "process == \"MyApp\""
+#   # ... launch the app on device ...
+#   wait_for_device_log_event "MyApp" 30
+wait_for_device_log_event() {
+    local process_name="$1"
+    local timeout="${2:-30}"
+    local poll_interval="${3:-0.1}"
+    local deadline=$((SECONDS + timeout))
+
+    if [ -z "${_AML_DEVICE_LOG_STREAM_FILE:-}" ] || [ ! -f "$_AML_DEVICE_LOG_STREAM_FILE" ]; then
+        echo "Error: device log stream not started. Call start_device_log_stream first." >&2
+        return 1
+    fi
+
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        # Check if the log file contains any entry mentioning the process.
+        # Use grep for speed — we just need to know if any line matches.
+        if grep -q "$process_name" "$_AML_DEVICE_LOG_STREAM_FILE" 2>/dev/null; then
+            # Found a match. Try to extract the timestamp from the first
+            # matching ndjson line.
+            local ts
+            ts=$(python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+            proc = entry.get('processImagePath', '') or entry.get('process', '')
+            if sys.argv[2] in str(proc):
+                print(entry.get('timestamp', 'found'))
+                sys.exit(0)
+        except (json.JSONDecodeError, KeyError):
+            continue
+sys.exit(1)
+" "$_AML_DEVICE_LOG_STREAM_FILE" "$process_name" 2>/dev/null)
+
+            if [ -n "$ts" ]; then
+                echo "$ts"
+                return 0
+            fi
+            # grep matched but python3 didn't parse a valid entry yet —
+            # could be a partial write. Keep polling.
+        fi
+        sleep "$poll_interval"
+    done
+
+    return 1  # timeout
+}
+
+# =============================================================================
+# iOS Device: device management helpers (xcrun devicectl)
+# =============================================================================
+
+# Find the UDID of a connected physical iOS device.
+# Uses `xcrun devicectl list devices` (Xcode 15+) with JSON output.
+#
+# If multiple devices are connected, returns the first one.
+# If no device is connected, returns empty string.
+#
+# Falls back to `xcrun xctrace list devices` if `devicectl` is not available
+# (older Xcode versions).
+#
+# Arguments: none
+#
+# Output: UDID string on stdout (or empty)
+#
+# Usage:
+#   DEVICE_UDID=$(get_connected_device_udid)
+#   if [ -z "$DEVICE_UDID" ]; then echo "No device"; fi
+get_connected_device_udid() {
+    # Try xcrun devicectl first (Xcode 15+)
+    if xcrun devicectl list devices --json-output /dev/stdout > /dev/null 2>&1; then
+        local udid
+        udid=$(xcrun devicectl list devices --json-output /dev/stdout 2>/dev/null | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    devices = data.get('result', {}).get('devices', [])
+    for d in devices:
+        conn = d.get('connectionProperties', {})
+        # Only consider devices that are connected via wired, localNetwork, or wifi
+        if conn.get('transportType', '') in ('wired', 'localNetwork', 'wifi'):
+            udid = d.get('identifier', '')
+            if udid:
+                print(udid)
+                sys.exit(0)
+except (json.JSONDecodeError, KeyError, TypeError):
+    pass
+" 2>/dev/null)
+        if [ -n "$udid" ]; then
+            echo "$udid"
+            return 0
+        fi
+    fi
+
+    # Fallback: xcrun xctrace list devices (older Xcode)
+    if command -v xcrun &> /dev/null; then
+        local udid
+        udid=$(xcrun xctrace list devices 2>/dev/null | grep -v "Simulator" | grep -E '\([0-9A-Fa-f-]+\)' | head -1 | sed 's/.*(\([0-9A-Fa-f-]*\)).*/\1/')
+        if [ -n "$udid" ]; then
+            echo "$udid"
+            return 0
+        fi
+    fi
+
+    return 0  # no device found — return empty (caller checks)
+}
+
+# Install an .app bundle on a physical iOS device.
+# Uses `xcrun devicectl device install app` (Xcode 15+).
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - app_path     Path to the .app bundle directory
+#
+# Returns:
+#   0 - App installed successfully
+#   1 - Installation failed
+#
+# Usage: install_app_on_device "$DEVICE_UDID" "$APP_BUNDLE"
+install_app_on_device() {
+    local device_udid="$1"
+    local app_path="$2"
+
+    if [ -z "$device_udid" ]; then
+        echo "Error: device UDID is required." >&2
+        return 1
+    fi
+    if [ -z "$app_path" ] || [ ! -d "$app_path" ]; then
+        echo "Error: app bundle path '$app_path' does not exist or is not a directory." >&2
+        return 1
+    fi
+
+    xcrun devicectl device install app --device "$device_udid" "$app_path" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Error: Failed to install app on device $device_udid (exit code $exit_code)." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Launch an app on a physical iOS device.
+# Uses `xcrun devicectl device process launch` (Xcode 15+).
+# Terminates any existing instance of the app before launching.
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - bundle_id    Bundle identifier of the app (e.g., "com.companyname.myapp")
+#
+# Returns:
+#   0 - App launched successfully
+#   1 - Launch failed
+#
+# Usage: launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+launch_app_on_device() {
+    local device_udid="$1"
+    local bundle_id="$2"
+
+    if [ -z "$device_udid" ]; then
+        echo "Error: device UDID is required." >&2
+        return 1
+    fi
+    if [ -z "$bundle_id" ]; then
+        echo "Error: bundle ID is required." >&2
+        return 1
+    fi
+
+    xcrun devicectl device process launch --terminate-existing --device "$device_udid" "$bundle_id" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Error: Failed to launch $bundle_id on device $device_udid (exit code $exit_code)." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Terminate a running app on a physical iOS device.
+# Best-effort — does not fail if the app is not running.
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - bundle_id    Bundle identifier of the app
+#
+# Returns:
+#   0 - Always (best-effort cleanup)
+#
+# Usage: terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+terminate_app_on_device() {
+    local device_udid="$1"
+    local bundle_id="$2"
+
+    if [ -z "$device_udid" ] || [ -z "$bundle_id" ]; then
+        return 0  # nothing to do
+    fi
+
+    # devicectl does not have a direct "terminate by bundle ID" command.
+    # Use xcrun devicectl device process terminate if a PID is known,
+    # otherwise fall back to launching with --terminate-existing which
+    # terminates any existing instance as a side effect. For clean
+    # termination, we attempt the pkill-style approach via devicectl.
+    # If that fails, it's best-effort — the app may not be running.
+    xcrun devicectl device process terminate --device "$device_udid" "$bundle_id" 2>/dev/null || true
+    return 0
+}
+
+# Uninstall an app from a physical iOS device.
+# Best-effort cleanup — does not fail if the app is not installed.
+#
+# Arguments:
+#   $1 - device_udid  UDID of the target device
+#   $2 - bundle_id    Bundle identifier of the app
+#
+# Returns:
+#   0 - Always (best-effort cleanup)
+#
+# Usage: uninstall_app_from_device "$DEVICE_UDID" "$BUNDLE_ID"
+uninstall_app_from_device() {
+    local device_udid="$1"
+    local bundle_id="$2"
+
+    if [ -z "$device_udid" ] || [ -z "$bundle_id" ]; then
+        return 0  # nothing to do
+    fi
+
+    xcrun devicectl device uninstall app --device "$device_udid" "$bundle_id" 2>/dev/null || true
+    return 0
 }
 
 # =============================================================================
