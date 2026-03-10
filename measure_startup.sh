@@ -1,6 +1,7 @@
 #!/bin/bash
 
 source "$(dirname "$0")/init.sh"
+source "$SCRIPT_DIR/tools/apple_measure_lib.sh"
 
 # Validate required tools
 if [ ! -f "$LOCAL_DOTNET" ]; then
@@ -200,6 +201,9 @@ else
     # Clean previous build artifacts to avoid stale state between configs
     rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
 
+    # Capture wall-clock build time as a fallback
+    BUILD_START_NS=$(get_timestamp_ns)
+
     # Build the package
     ${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
         -bl:"$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog" \
@@ -209,6 +213,19 @@ else
     if [ $? -ne 0 ]; then
         echo "Error: Build failed."
         exit 1
+    fi
+
+    BUILD_END_NS=$(get_timestamp_ns)
+    WALLCLOCK_BUILD_MS=$(elapsed_ms "$BUILD_START_NS" "$BUILD_END_NS")
+
+    # Try detailed build time parsing from the binlog
+    BINLOG_PATH="$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog"
+    BUILDTIME_OUTPUT=$(run_buildtime_parser "$BINLOG_PATH" "${SAMPLE_APP}_${BUILD_CONFIG}" 2>&1) || true
+    if echo "$BUILDTIME_OUTPUT" | grep -q "Build time:"; then
+        echo "$BUILDTIME_OUTPUT"
+    else
+        # Fall back to wall-clock build time
+        echo "Build time: ${WALLCLOCK_BUILD_MS} ms"
     fi
 
     # Find the built package

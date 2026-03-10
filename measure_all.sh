@@ -130,7 +130,7 @@ echo ""
 
 mkdir -p "$RESULTS_DIR"
 SUMMARY_FILE="$RESULTS_DIR/summary.csv"
-echo "app,config,avg_ms,min_ms,max_ms,pkg_size_mb,pkg_size_bytes,iterations" > "$SUMMARY_FILE"
+echo "app,config,avg_ms,min_ms,max_ms,pkg_size_mb,pkg_size_bytes,build_time_ms,iterations" > "$SUMMARY_FILE"
 
 for i in "${!CONFIGS[@]}"; do
     IFS='|' read -r app config <<< "${CONFIGS[$i]}"
@@ -166,14 +166,20 @@ for i in "${!CONFIGS[@]}"; do
             APK_SIZE_MB="unknown"
         fi
 
+        # Parse build time from output
+        BUILD_TIME=$(echo "$OUTPUT" | grep "Build time:" | sed -n 's/.*Build time: \([0-9.]*\) ms.*/\1/p' | tail -1)
+        if [ -z "$BUILD_TIME" ]; then
+            BUILD_TIME="N/A"
+        fi
+
         if [ -z "$AVG" ] || [ -z "$MIN" ] || [ -z "$MAX" ]; then
             echo "⚠️  PARSE FAILED — could not extract startup times from output"
             echo "$OUTPUT" | tail -10
             FAILURES+=("$app|$config")
             FAILED=$((FAILED + 1))
         else
-            echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  pkg=${APK_SIZE_MB}MB"
-            echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$ITERATIONS" >> "$SUMMARY_FILE"
+            echo "✅ avg=${AVG}ms  min=${MIN}ms  max=${MAX}ms  pkg=${APK_SIZE_MB}MB  build=${BUILD_TIME}ms"
+            echo "$app,$config,$AVG,$MIN,$MAX,$APK_SIZE_MB,$APK_SIZE_BYTES,$BUILD_TIME,$ITERATIONS" >> "$SUMMARY_FILE"
             PASSED=$((PASSED + 1))
         fi
     else
@@ -202,10 +208,10 @@ echo ""
 
 # Print the summary table
 if [ -f "$SUMMARY_FILE" ]; then
-    echo "App                          | Config         | Avg (ms) | Min (ms) | Max (ms) | $PLATFORM_PACKAGE_LABEL (MB)"
-    echo "-----------------------------|----------------|----------|----------|----------|--------"
-    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app config avg min max pkg_mb pkg_bytes iters; do
-        printf "%-28s | %-14s | %8s | %8s | %8s | %8s\n" "$app" "$config" "$avg" "$min" "$max" "$pkg_mb"
+    echo "App                          | Config         | Avg (ms) | Min (ms) | Max (ms) | Build (ms) | $PLATFORM_PACKAGE_LABEL (MB)"
+    echo "-----------------------------|----------------|----------|----------|----------|------------|--------"
+    tail -n +2 "$SUMMARY_FILE" | while IFS=',' read -r app config avg min max pkg_mb pkg_bytes build_time iters; do
+        printf "%-28s | %-14s | %8s | %8s | %8s | %10s | %8s\n" "$app" "$config" "$avg" "$min" "$max" "$build_time" "$pkg_mb"
     done
 fi
 

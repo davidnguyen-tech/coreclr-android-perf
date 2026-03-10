@@ -14,6 +14,7 @@
 #   - Log stream event detection for iOS Simulator
 #   - Process detection (wait for process by name)
 #   - Statistics computation (avg, median, min, max, stdev)
+#   - Build time measurement (binlog parsing via dotnet/performance)
 #   - Output formatting (parseable summary lines for measure_all.sh)
 #   - CSV result saving
 #
@@ -330,6 +331,117 @@ print(f'{max_t:.2f}')
 print(f'{stdev:.2f}')
 print(f'{n}')
 PYEOF
+}
+
+# =============================================================================
+# Build time measurement (binlog parsing)
+# =============================================================================
+
+# Run test.py buildtime to parse build metrics from an MSBuild binlog.
+#
+# Uses the dotnet/performance infrastructure to extract per-task build timing
+# (ILLink, MonoAOTCompiler, AppleAppBuilderTask, AndroidAppBuilderTask) and
+# total Publish Time from a binary log produced by `dotnet build -bl:`.
+#
+# Outputs a "Build time: XXXX.XX ms" line to stdout on success.
+# Also outputs the detailed per-task breakdown from test.py for visibility.
+# On failure, prints a warning and outputs nothing parseable — the caller
+# can fall back to wall-clock timing.
+#
+# Requirements:
+#   - DOTNET_ROOT must be set (or DOTNET_DIR from init.sh)
+#   - python3 must be available
+#   - The external/performance submodule must be checked out
+#
+# Arguments:
+#   $1 - binlog_path     Absolute path to the .binlog file
+#   $2 - scenario_name   Name for the scenario (e.g., "dotnet-new-macos_CORECLR_JIT")
+#
+# Usage:
+#   BUILDTIME_OUTPUT=$(run_buildtime_parser "$BINLOG_PATH" "${SAMPLE_APP}_${BUILD_CONFIG}")
+#   echo "$BUILDTIME_OUTPUT"
+run_buildtime_parser() {
+    local binlog_path="$1"
+    local scenario_name="$2"
+
+    # Validate inputs
+    if [ -z "$binlog_path" ] || [ ! -f "$binlog_path" ]; then
+        echo "Warning: Binlog not found at '$binlog_path', skipping build time parsing." >&2
+        return 1
+    fi
+
+    if [ -z "$scenario_name" ]; then
+        echo "Warning: scenario_name is required for build time parsing." >&2
+        return 1
+    fi
+
+    # Locate the test.py script in the dotnet/performance submodule.
+    # We use genericandroidstartup as the scenario directory because the
+    # buildtime codepath in runner.py ignores the scenario's EXENAME —
+    # it unconditionally sets apptorun="app". Any scenario dir works.
+    local perf_dir="${PERF_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/external/performance}"
+    local scenario_dir="$perf_dir/src/scenarios/genericandroidstartup"
+    local test_py="$scenario_dir/test.py"
+
+    if [ ! -f "$test_py" ]; then
+        echo "Warning: test.py not found at '$test_py'. Is the external/performance submodule checked out?" >&2
+        return 1
+    fi
+
+    # Ensure DOTNET_ROOT is set for the Startup tool build
+    local dotnet_dir="${DOTNET_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.dotnet}"
+    export DOTNET_ROOT="${DOTNET_ROOT:-$dotnet_dir}"
+    export PATH="$DOTNET_ROOT:$PATH"
+
+    # Ensure PYTHONPATH includes the scenarios dir (for shared.runner import)
+    local scenarios_dir="${SCENARIOS_DIR:-$perf_dir/src/scenarios}"
+    export PYTHONPATH="$scenarios_dir:${PYTHONPATH:-}"
+
+    # The runner expects the binlog at traces/<binlog-path> relative to CWD.
+    # Create traces/ in the scenario dir and copy the binlog there.
+    local binlog_filename
+    binlog_filename=$(basename "$binlog_path")
+
+    local traces_dir="$scenario_dir/traces"
+    mkdir -p "$traces_dir"
+    cp "$binlog_path" "$traces_dir/$binlog_filename"
+
+    # Run test.py buildtime from the scenario directory
+    local output
+    local exit_code
+    output=$(cd "$scenario_dir" && python3 test.py buildtime \
+        --scenario-name "$scenario_name" \
+        --binlog-path "./$binlog_filename" 2>&1) || exit_code=$?
+    exit_code=${exit_code:-0}
+
+    # Clean up: remove the copied binlog to avoid accumulation
+    rm -f "$traces_dir/$binlog_filename"
+
+    if [ $exit_code -ne 0 ]; then
+        echo "Warning: test.py buildtime failed (exit code $exit_code). Build time parsing unavailable." >&2
+        echo "$output" | tail -5 >&2
+        return 1
+    fi
+
+    # Echo the full output for visibility (detailed per-task breakdown)
+    echo "$output"
+
+    # Parse "Publish Time" from the result table.
+    # Format: "Publish Time   |42.123 s       |42.123 s       |42.123 s"
+    local publish_time_s
+    publish_time_s=$(echo "$output" | grep "Publish Time" | awk -F'|' '{print $2}' | sed 's/[^0-9.]//g')
+
+    if [ -n "$publish_time_s" ]; then
+        # Convert seconds to milliseconds
+        local build_time_ms
+        build_time_ms=$(python3 -c "print(f'{float(\"$publish_time_s\") * 1000:.2f}')")
+        echo "Build time: ${build_time_ms} ms"
+    else
+        echo "Warning: Could not parse Publish Time from test.py buildtime output." >&2
+        return 1
+    fi
+
+    return 0
 }
 
 # =============================================================================
