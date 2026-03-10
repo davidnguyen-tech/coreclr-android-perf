@@ -534,8 +534,17 @@ try:
     devices = data.get('result', {}).get('devices', [])
     for d in devices:
         conn = d.get('connectionProperties', {})
-        # Only consider devices that are connected via wired, localNetwork, or wifi
-        if conn.get('transportType', '') in ('wired', 'localNetwork', 'wifi'):
+        hw = d.get('hardwareProperties', {})
+        # Only consider iOS/iPadOS devices connected via USB (wired).
+        # IMPORTANT: 'localNetwork' matches the host Mac itself (which appears as a
+        # CoreDevice), and 'wifi' is unreliable for device operations. Always use
+        # 'wired' only. See: .github/researches/ios-device-udid-mismatch.md
+        if conn.get('transportType', '') == 'wired' and hw.get('platform', '') in ('iOS', 'iPadOS'):
+            # Returns the CoreDevice identifier (UUID format), which is what
+            # 'xcrun devicectl' commands expect for --device.
+            # NOTE: 'sudo log collect --device-udid' may expect the hardware UDID
+            # (from hardwareProperties.udid) instead of this CoreDevice identifier.
+            # If log collection fails, switch to hw.get('udid', d.get('identifier', '')).
             udid = d.get('identifier', '')
             if udid:
                 print(udid)
