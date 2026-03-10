@@ -93,16 +93,6 @@ if [ -n "$PREBUILT_PACKAGE_PATH" ] && [ "$PREBUILT" = false ]; then
     exit 1
 fi
 
-# ios: route to dedicated script — physical device measurement uses xcrun devicectl, not test.py
-if [[ "$PLATFORM" == "ios" ]]; then
-    IOS_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")
-    if [ "$PREBUILT" = true ]; then
-        IOS_ARGS+=("--package-path" "$PREBUILT_PACKAGE_PATH")
-    fi
-    # Forward any passthrough args (e.g. --startup-iterations)
-    exec "$SCRIPT_DIR/ios/measure_device_startup.sh" "${IOS_ARGS[@]}" "$@"
-fi
-
 # ios-simulator: route to dedicated script — test.py only supports physical iOS devices
 if [[ "$PLATFORM" == "ios-simulator" ]]; then
     SIM_ARGS=("$SAMPLE_APP" "$BUILD_CONFIG")

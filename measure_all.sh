@@ -145,10 +145,7 @@ for i in "${!CONFIGS[@]}"; do
     echo "[$NUM/$TOTAL] $app | $config"
     echo "----------------------------------------------"
 
-    if [ "$PLATFORM_DEVICE_TYPE" = "ios" ]; then
-        OUTPUT=$("$SCRIPT_DIR/ios/measure_device_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
-    elif [ "$PLATFORM_DEVICE_TYPE" = "ios-simulator" ]; then
+    if [ "$PLATFORM_DEVICE_TYPE" = "ios-simulator" ]; then
         OUTPUT=$("$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$app" "$config" \
             --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     elif [ "$PLATFORM_DEVICE_TYPE" = "osx" ]; then
