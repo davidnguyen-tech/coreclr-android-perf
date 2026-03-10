@@ -441,9 +441,9 @@ for ((i = 0; i <= ITERATIONS; i++)); do
         continue
     fi
 
-    # Wait for the app to fully start — 3s is sufficient for apps that start
-    # in ~250ms, allowing time for the OS to emit all Watchdog events.
-    sleep 3
+    # Wait 5s for OS to emit and flush all 4 SpringBoard Watchdog events.
+    # Matches runner.py timing. Reducing below 5s causes ~50% parse failures.
+    sleep 5
 
     # Collect device logs for this iteration
     LOGARCHIVE="/tmp/ios_startup_iteration_${i}.logarchive"
