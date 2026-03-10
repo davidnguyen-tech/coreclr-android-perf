@@ -441,9 +441,10 @@ for ((i = 0; i <= ITERATIONS; i++)); do
         continue
     fi
 
-    # Wait for the app to fully start — 3s is sufficient for apps that start
-    # in ~250ms, allowing time for the OS to emit all Watchdog events.
-    sleep 3
+    # Wait for OS to emit Watchdog events and flush to log store.
+    # 5s matches runner.py — reducing below this causes intermittent parse failures
+    # because not all 4 Watchdog events have flushed before log collect runs.
+    sleep 5
 
     # Collect device logs for this iteration
     LOGARCHIVE="/tmp/ios_startup_iteration_${i}.logarchive"
