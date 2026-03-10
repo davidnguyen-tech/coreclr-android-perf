@@ -104,10 +104,11 @@ iOS apps are built as `.app` directory bundles (not single files like Android AP
 iOS physical device startup measurement uses the dedicated `ios/measure_device_startup.sh` script:
 
 - **`xcrun devicectl`** for app installation, launching, and termination
-- **`log stream --device`** for timing detection (first log event from the app process)
+- **`sudo log collect --device`** for post-hoc device log collection
+- **SpringBoard Watchdog event parsing** for precise time-to-main and time-to-first-draw
 - **Code signing** is required — the app must be signed with a valid development certificate and provisioning profile
 
-> **Note:** Previous versions used `dotnet/performance`'s `test.py` with `sudo log collect --device`, which hangs on modern macOS/iOS combinations. The dedicated script bypasses `test.py` entirely.
+> **Note:** This approach is adapted from dotnet/performance's `runner.py`, which uses the same `sudo log collect --device` + SpringBoard Watchdog parsing technique. It requires passwordless sudo configured for `log collect`.
 
 ## Simulator Support
 
@@ -190,13 +191,17 @@ Physical iOS device measurement uses `ios/measure_device_startup.sh` for direct 
 
 ### Prerequisites
 
-- Physical iPhone/iPad connected via **USB** (WiFi may work but is less reliable for log streaming)
+- Physical iPhone/iPad connected via **USB** (WiFi may work but is less reliable for log collection)
 - Device must be **unlocked and trusted**
 - **Developer Mode** enabled (Settings > Privacy & Security > Developer Mode)
 - Valid **code signing identity** (Xcode-managed automatic signing is recommended)
 - **Xcode 15+** (required for `xcrun devicectl`)
+- **Passwordless sudo** configured for `log collect` (device log collection)
 
-> **Note:** Passwordless `sudo` is NOT required for device measurement — the dedicated script uses `log stream --device` which does not require elevated privileges.
+> **Passwordless sudo setup:** Add to `/etc/sudoers` via `visudo`:
+> ```
+> <username> ALL=(ALL) NOPASSWD: /usr/bin/log
+> ```
 
 ### Quick Start (Device)
 
@@ -220,9 +225,9 @@ Physical iOS device measurement uses `ios/measure_device_startup.sh` for direct 
 ### How It Works
 
 - **RID**: `ios-arm64` — physical iOS devices are always arm64
-- **Measurement**: `ios/measure_device_startup.sh` monitors `log stream --device` for the first log event from the app process after launch via `xcrun devicectl`. This captures process creation, dyld loading, .NET runtime initialization, and early framework setup.
+- **Measurement**: `ios/measure_device_startup.sh` collects device logs post-hoc via `sudo log collect --device` after each app launch, then parses SpringBoard Watchdog events to extract precise time-to-main and time-to-first-draw. This is the same technique used by dotnet/performance's `runner.py` in CI.
 - **Code signing**: Required — Apple Developer account with provisioning profile. The script does not manage signing — it relies on the developer's Xcode signing configuration.
-- **No `sudo`**: Unlike the legacy `test.py` path, the dedicated script does NOT use `sudo log collect --device`.
+- **Warmup iteration**: Iteration 0 is a warmup used to establish a device-side time reference, avoiding host-device clock drift. Measured iterations start from 1.
 
 ### Device Auto-Detection
 
@@ -262,7 +267,7 @@ ios/
 ├── build-configs.props             # 6 build configuration presets
 ├── build-workarounds.targets       # iOS-specific build targets
 ├── collect_nettrace.sh             # .nettrace trace collection (device via dsrouter, simulator via direct socket)
-├── measure_device_startup.sh       # Physical device startup measurement (device log stream timing)
+├── measure_device_startup.sh       # Physical device startup measurement (SpringBoard Watchdog timing)
 ├── measure_simulator_startup.sh    # Simulator startup measurement (host log stream timing)
 └── print_app_sizes.sh              # .app bundle size reporting
 ```

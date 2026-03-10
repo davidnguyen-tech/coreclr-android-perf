@@ -1,22 +1,26 @@
 #!/bin/bash
 
-# Measures iOS physical device startup time using device log stream monitoring.
+# Measures iOS physical device startup time using SpringBoard Watchdog events.
 #
 # This script measures iOS device app startup by installing the app via
 # `xcrun devicectl`, launching it via `xcrun devicectl device process launch`,
-# and monitoring `log stream --device` for the first runtime log event emitted
-# by the app process. This captures the startup pipeline: process creation,
-# dyld loading, runtime initialization, and framework setup.
+# and collecting device logs post-hoc via `sudo log collect --device`.
+# It then parses SpringBoard Watchdog events from the collected logarchive
+# to extract precise time-to-main and time-to-first-draw measurements.
 #
-# The script bypasses dotnet/performance's test.py (which uses
-# `sudo log collect --device` that hangs on modern macOS) and uses
-# direct device interaction via Xcode's devicectl.
+# This approach is adapted from dotnet/performance's runner.py, which uses
+# the same `sudo log collect --device` + SpringBoard Watchdog event parsing
+# technique for iOS device startup measurement in CI.
+#
+# The script uses a warmup iteration (iteration 0) to establish a device-side
+# time reference, avoiding host-device clock drift issues.
 #
 # Prerequisites:
 #   - Physical iOS device connected via USB (WiFi may work but is less reliable)
 #   - Device must be trusted and have Developer Mode enabled
 #   - Valid code signing identity (Xcode-managed or manual provisioning profile)
 #   - Xcode 15+ (for xcrun devicectl)
+#   - Passwordless sudo configured for `log collect` (device log collection)
 
 source "$(dirname "$0")/../init.sh"
 source "$SCRIPT_DIR/tools/apple_measure_lib.sh"
@@ -45,13 +49,26 @@ if ! xcrun devicectl --version &> /dev/null; then
     exit 1
 fi
 
+# Verify passwordless sudo for log collect (required for device log collection)
+if ! sudo -n true 2>/dev/null; then
+    echo "Error: Passwordless sudo is required for 'sudo log collect --device'."
+    echo ""
+    echo "Configure passwordless sudo by adding this to /etc/sudoers (via visudo):"
+    echo "  $(whoami) ALL=(ALL) NOPASSWD: /usr/bin/log"
+    echo ""
+    echo "Or for broader access:"
+    echo "  $(whoami) ALL=(ALL) NOPASSWD: ALL"
+    exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
 print_usage() {
     echo "Usage: $0 <app-name> <build-config> [options]"
     echo ""
-    echo "Measures iOS physical device startup time using device log stream monitoring."
+    echo "Measures iOS physical device startup time using SpringBoard Watchdog events."
+    echo "Requires passwordless sudo for 'log collect --device'."
     echo ""
     echo "Apps:     dotnet-new-ios, dotnet-new-maui, dotnet-new-maui-samplecontent"
     echo "Configs:  MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R_COMP, R2R_COMP_PGO"
@@ -314,25 +331,13 @@ fi
 echo "Bundle ID: $BUNDLE_ID"
 
 # ---------------------------------------------------------------------------
-# Extract CFBundleExecutable for log stream filtering
-# ---------------------------------------------------------------------------
-EXECUTABLE_NAME=""
-if [ -f "$PLIST_PATH" ]; then
-    EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST_PATH" 2>/dev/null || true)
-fi
-if [ -z "$EXECUTABLE_NAME" ]; then
-    EXECUTABLE_NAME=$(basename "$APP_BUNDLE" .app)
-    echo "Warning: Could not read CFBundleExecutable, using fallback: $EXECUTABLE_NAME"
-fi
-echo "Executable: $EXECUTABLE_NAME"
-
-# ---------------------------------------------------------------------------
 # Cleanup function
 # ---------------------------------------------------------------------------
 cleanup() {
     echo ""
     echo "--- Cleaning up ---"
-    stop_device_log_stream
+    # Remove any leftover logarchives from this run
+    rm -rf /tmp/ios_startup_iteration_*.logarchive
     # Uninstall the app from the device
     uninstall_app_from_device "$DEVICE_UDID" "$BUNDLE_ID"
 }
@@ -352,67 +357,156 @@ fi
 # ---------------------------------------------------------------------------
 # Measurement loop
 # ---------------------------------------------------------------------------
+# Uses the same approach as dotnet/performance's runner.py:
+#   - Iteration 0 is a warmup to establish device-side time reference
+#   - Subsequent iterations measure startup via SpringBoard Watchdog events
+#   - Inter-iteration wait is 10 seconds (matching runner.py)
+#   - Each iteration: launch → wait 5s → collect logs → parse Watchdog events
 echo ""
-echo "=== Measuring startup ($ITERATIONS iterations) ==="
+echo "=== Measuring startup ($ITERATIONS iterations + 1 warmup) ==="
 echo ""
 
 TIMES=()
 FAILED_COUNT=0
 
-for ((i = 1; i <= ITERATIONS; i++)); do
-    # Clean state: terminate any running instance and uninstall
+# NEXT_COLLECT_START tracks the device-side reference timestamp for --start.
+# Initialized with a generous 30-second lookback from host time.
+# The warmup iteration updates it to a device-side timestamp.
+NEXT_COLLECT_START=""
+
+for ((i = 0; i <= ITERATIONS; i++)); do
+    # Clean state: terminate any running instance
     terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+
+    # Wait between iterations (10s, same as runner.py)
+    if [ $i -gt 0 ]; then
+        sleep 10
+    else
+        # Shorter wait before warmup
+        sleep 2
+    fi
+
+    # Uninstall and reinstall for a cold start
     uninstall_app_from_device "$DEVICE_UDID" "$BUNDLE_ID"
 
-    # Fresh install
     INSTALL_OUTPUT=$(install_app_on_device "$DEVICE_UDID" "$APP_BUNDLE" 2>&1)
     if [ $? -ne 0 ]; then
+        if [ $i -eq 0 ]; then
+            echo "Error: Warmup failed — could not install app on device."
+            echo "  $INSTALL_OUTPUT" | head -3
+            exit 1
+        fi
         echo "  [$i/$ITERATIONS] FAILED — could not install app on device"
         echo "    $INSTALL_OUTPUT" | head -3
         FAILED_COUNT=$((FAILED_COUNT + 1))
         continue
     fi
 
-    # Start device log stream BEFORE launching the app
-    start_device_log_stream "process == \"$EXECUTABLE_NAME\""
-
-    # Capture start timestamp
-    START_NS=$(get_timestamp_ns)
+    # Determine the --start timestamp for log collection.
+    # For warmup (i=0), use a generous lookback from host time.
+    # For subsequent iterations, use the device-side reference from the previous iteration.
+    if [ $i -eq 0 ] || [ -z "$NEXT_COLLECT_START" ]; then
+        COLLECT_START=$(date -v-30S '+%Y-%m-%d %H:%M:%S%z')
+    else
+        COLLECT_START="$NEXT_COLLECT_START"
+    fi
 
     # Launch the app on the device
     LAUNCH_OUTPUT=$(launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" 2>&1)
     LAUNCH_RESULT=$?
 
     if [ $LAUNCH_RESULT -ne 0 ]; then
-        stop_device_log_stream
+        if [ $i -eq 0 ]; then
+            echo "Error: Warmup failed — could not launch app on device."
+            echo "  $LAUNCH_OUTPUT" | head -3
+            exit 1
+        fi
         echo "  [$i/$ITERATIONS] FAILED — devicectl launch returned $LAUNCH_RESULT"
         echo "    $LAUNCH_OUTPUT" | head -3
         FAILED_COUNT=$((FAILED_COUNT + 1))
         continue
     fi
 
-    # Wait for the app's first device log event (indicates runtime initialization)
-    if ! wait_for_device_log_event "$EXECUTABLE_NAME" 60 > /dev/null; then
-        END_NS=$(get_timestamp_ns)
-        stop_device_log_stream
-        echo "  [$i/$ITERATIONS] FAILED — no device log events within 60s"
-        terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+    # Wait for the app to fully start (5s, same as runner.py)
+    sleep 5
+
+    # Collect device logs for this iteration
+    LOGARCHIVE="/tmp/ios_startup_iteration_${i}.logarchive"
+    COLLECT_OUTPUT=$(collect_device_logs "$COLLECT_START" "$LOGARCHIVE" 2>&1)
+    COLLECT_RESULT=$?
+
+    # Terminate the app now that logs are collected
+    terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+
+    if [ $COLLECT_RESULT -ne 0 ]; then
+        if [ $i -eq 0 ]; then
+            echo "Error: Warmup failed — could not collect device logs."
+            echo "  $COLLECT_OUTPUT" | head -3
+            exit 1
+        fi
+        echo "  [$i/$ITERATIONS] FAILED — log collect returned $COLLECT_RESULT"
+        echo "    $COLLECT_OUTPUT" | head -3
         FAILED_COUNT=$((FAILED_COUNT + 1))
+        rm -rf "$LOGARCHIVE"
         continue
     fi
 
-    END_NS=$(get_timestamp_ns)
-    stop_device_log_stream
+    # --- Warmup iteration: establish device time reference ---
+    if [ $i -eq 0 ]; then
+        LAST_TS=$(get_last_watchdog_timestamp "$LOGARCHIVE" "$BUNDLE_ID")
+        if [ -z "$LAST_TS" ]; then
+            echo "Error: Warmup failed — no SpringBoard Watchdog events found in device logs."
+            echo "This could mean:"
+            echo "  - The app crashed on launch"
+            echo "  - The host and device clocks are too far out of sync"
+            echo "  - The app bundle ID '$BUNDLE_ID' doesn't match what SpringBoard sees"
+            rm -rf "$LOGARCHIVE"
+            exit 1
+        fi
 
-    ELAPSED_MS=$(elapsed_ms "$START_NS" "$END_NS")
-    TIMES+=("$ELAPSED_MS")
+        NEXT_COLLECT_START=$(advance_timestamp "$LAST_TS" 1)
+        echo "  [warmup] OK — device time reference established"
 
-    echo "  [$i/$ITERATIONS] ${ELAPSED_MS} ms"
+        # Try to show warmup timing for debugging
+        WARMUP_TIMING=$(parse_watchdog_timing "$LOGARCHIVE" "$BUNDLE_ID" 2>/dev/null) || true
+        if [ -n "$WARMUP_TIMING" ]; then
+            WARMUP_MAIN=$(echo "$WARMUP_TIMING" | sed -n '2p')
+            WARMUP_DRAW=$(echo "$WARMUP_TIMING" | sed -n '3p')
+            echo "           (time-to-main: ${WARMUP_MAIN} ms, time-to-draw: ${WARMUP_DRAW} ms)"
+        fi
 
-    # Terminate the app before next iteration
-    terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+        rm -rf "$LOGARCHIVE"
+        continue
+    fi
 
-    # Brief pause between iterations to let the device settle
+    # --- Real measurement iteration ---
+    TIMING=$(parse_watchdog_timing "$LOGARCHIVE" "$BUNDLE_ID" 2>&1)
+    PARSE_RESULT=$?
+
+    if [ $PARSE_RESULT -ne 0 ]; then
+        echo "  [$i/$ITERATIONS] FAILED — could not parse Watchdog events"
+        echo "    $TIMING" | head -3
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        rm -rf "$LOGARCHIVE"
+        continue
+    fi
+
+    TOTAL_MS=$(echo "$TIMING" | sed -n '1p')
+    TIME_TO_MAIN=$(echo "$TIMING" | sed -n '2p')
+    TIME_TO_DRAW=$(echo "$TIMING" | sed -n '3p')
+
+    # Update device-side reference for next iteration
+    LAST_TS=$(get_last_watchdog_timestamp "$LOGARCHIVE" "$BUNDLE_ID")
+    if [ -n "$LAST_TS" ]; then
+        NEXT_COLLECT_START=$(advance_timestamp "$LAST_TS" 1)
+    fi
+
+    TIMES+=("$TOTAL_MS")
+    echo "  [$i/$ITERATIONS] ${TOTAL_MS} ms (main: ${TIME_TO_MAIN}, draw: ${TIME_TO_DRAW})"
+
+    # Cleanup logarchive
+    rm -rf "$LOGARCHIVE"
+
     sleep 2
 done
 

@@ -13,7 +13,7 @@
 #   - High-resolution timing helpers (nanosecond timestamps, elapsed ms)
 #   - Window-appearance detection for macOS / Mac Catalyst (via AppleScript)
 #   - Log stream event detection for iOS Simulator
-#   - Device log stream event detection for iOS physical devices
+#   - Post-hoc device log collection + SpringBoard Watchdog timing for iOS devices
 #   - Device management helpers (install, launch, terminate, uninstall)
 #   - Process detection (wait for process by name)
 #   - Statistics computation (avg, median, min, max, stdev)
@@ -241,127 +241,259 @@ sys.exit(1)
 }
 
 # =============================================================================
-# iOS Device: device log stream event detection
+# iOS Device: startup timing via sudo log collect --device
 # =============================================================================
-
-# Variables set by start_device_log_stream / cleaned up by stop_device_log_stream.
-# These are intentionally global so the caller can reference them.
-# Uses a _DEVICE_ prefix to avoid collisions with the simulator log stream globals.
-_AML_DEVICE_LOG_STREAM_PID=""
-_AML_DEVICE_LOG_STREAM_FILE=""
-
-# Start a background `log stream --device` filtered for a specific process.
-# Must be called BEFORE launching the app on the device.
+# Uses post-hoc log collection to extract SpringBoard Watchdog timing events,
+# following the same approach as dotnet/performance's runner.py.
 #
-# Uses a separate pair of global variables from the simulator log stream
-# so both can coexist if needed (though in practice only one is used at a time).
+# Background:
+#   `log stream --device` does NOT exist — the --device flag is only valid on
+#   `log collect`. Physical device logs are not accessible via the host's
+#   `log stream` command (which only reads the local unified log).
 #
-# Sets:
-#   _AML_DEVICE_LOG_STREAM_PID  - PID of the background log stream process
-#   _AML_DEVICE_LOG_STREAM_FILE - Path to the temp file collecting device log output
+# Flow (per iteration):
+#   1. Launch the app via xcrun devicectl
+#   2. Wait for the app to fully start (sleep 5s)
+#   3. Collect device logs post-hoc: sudo log collect --device --start <ts>
+#   4. Parse the .logarchive for SpringBoard Watchdog events
+#   5. Extract time-to-main and time-to-first-draw from event timestamps
 #
-# Arguments:
-#   $1 - predicate  A `log stream --predicate` expression
-#                   (e.g., "process == \"MyApp\"")
-#   $2 - settle     Seconds to wait after starting the stream to ensure
-#                   it is connected (default: 1.0)
-#                   NOTE: Device log stream has higher latency than host —
-#                   default settle time is 1.0s (vs 0.5s for simulator)
+# Requires: passwordless sudo configured for `log collect --device`.
 #
-# Usage: start_device_log_stream "process == \"MyApp\"" 1.0
-start_device_log_stream() {
-    stop_device_log_stream
-    local predicate="$1"
-    local settle="${2:-1.0}"
+# See: .github/researches/ios-device-log-streaming.md for full analysis.
 
-    _AML_DEVICE_LOG_STREAM_FILE=$(mktemp /tmp/apple_measure_device_log.XXXXXX)
-
-    log stream --device --predicate "$predicate" \
-        --style ndjson --level info > "$_AML_DEVICE_LOG_STREAM_FILE" 2>/dev/null &
-    _AML_DEVICE_LOG_STREAM_PID=$!
-
-    # Brief pause to ensure the device log stream is connected before we launch the app
-    sleep "$settle"
-}
-
-# Stop the background device log stream and clean up the temp file.
-# Safe to call even if start_device_log_stream was never called.
-# Usage: stop_device_log_stream
-stop_device_log_stream() {
-    if [ -n "${_AML_DEVICE_LOG_STREAM_PID:-}" ]; then
-        kill "$_AML_DEVICE_LOG_STREAM_PID" 2>/dev/null || true
-        wait "$_AML_DEVICE_LOG_STREAM_PID" 2>/dev/null || true
-        _AML_DEVICE_LOG_STREAM_PID=""
-    fi
-    if [ -n "${_AML_DEVICE_LOG_STREAM_FILE:-}" ] && [ -f "$_AML_DEVICE_LOG_STREAM_FILE" ]; then
-        rm -f "$_AML_DEVICE_LOG_STREAM_FILE"
-        _AML_DEVICE_LOG_STREAM_FILE=""
-    fi
-}
-
-# Wait for a matching log event to appear in the device log stream output file.
-# Identical to wait_for_log_event() but reads from the device log stream file.
+# Collect device logs for a time window into a .logarchive file.
+# Requires: passwordless sudo configured for 'log collect'.
 #
 # Arguments:
-#   $1 - process_name  The process name to search for in log entries
-#   $2 - timeout       Maximum seconds to wait (default: 30)
-#   $3 - poll_interval Seconds between polls (default: 0.1)
+#   $1 - start_timestamp  Start time in "YYYY-MM-DD HH:MM:SS±ZZZZ" format
+#   $2 - output_path      Path for the output .logarchive (directory)
 #
 # Returns:
-#   0 - Matching event found (timestamp is printed to stdout if available)
-#   1 - Timeout (no matching event within the timeout period)
-#
-# Usage:
-#   start_device_log_stream "process == \"MyApp\""
-#   # ... launch the app on device ...
-#   wait_for_device_log_event "MyApp" 30
-wait_for_device_log_event() {
-    local process_name="$1"
-    local timeout="${2:-30}"
-    local poll_interval="${3:-0.1}"
-    local deadline=$((SECONDS + timeout))
+#   0 - Collection succeeded
+#   1 - Collection failed
+collect_device_logs() {
+    local start_timestamp="$1"
+    local output_path="$2"
 
-    if [ -z "${_AML_DEVICE_LOG_STREAM_FILE:-}" ] || [ ! -f "$_AML_DEVICE_LOG_STREAM_FILE" ]; then
-        echo "Error: device log stream not started. Call start_device_log_stream first." >&2
+    if [ -z "$start_timestamp" ] || [ -z "$output_path" ]; then
+        echo "Error: collect_device_logs requires start_timestamp and output_path." >&2
         return 1
     fi
 
-    while [ "$SECONDS" -lt "$deadline" ]; do
-        # Check if the log file contains any entry mentioning the process.
-        # Use grep for speed — we just need to know if any line matches.
-        if grep -q "$process_name" "$_AML_DEVICE_LOG_STREAM_FILE" 2>/dev/null; then
-            # Found a match. Try to extract the timestamp from the first
-            # matching ndjson line.
-            local ts
-            ts=$(python3 -c "
+    # Remove previous logarchive at this path if it exists
+    rm -rf "$output_path"
+
+    sudo log collect --device \
+        --start "$start_timestamp" \
+        --output "$output_path" 2>&1
+
+    if [ $? -ne 0 ] || [ ! -d "$output_path" ]; then
+        echo "Error: sudo log collect --device failed." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Parse SpringBoard Watchdog events from a .logarchive file.
+# Extracts time-to-main and time-to-first-draw for a given bundle ID.
+#
+# SpringBoard emits 4 Watchdog events during app startup:
+#   1. "Now monitoring resource allowance of 20.00s" — OS starts watching main()
+#   2. "Stopped monitoring."                         — App reached main()
+#   3. "Now monitoring resource allowance of N.NNs"  — OS starts watching first draw
+#   4. "Stopped monitoring."                         — App drew first frame
+#
+# Time-to-main    = Event 2 timestamp - Event 1 timestamp
+# Time-to-draw    = Event 4 timestamp - Event 3 timestamp
+# Total startup   = time-to-main + time-to-draw
+#
+# Arguments:
+#   $1 - logarchive_path  Path to the .logarchive directory
+#   $2 - bundle_id        App bundle identifier (e.g., "com.companyname.myapp")
+#
+# Output (stdout, 3 lines on success):
+#   Line 1: total_ms      (time-to-main + time-to-first-draw)
+#   Line 2: time_to_main_ms
+#   Line 3: time_to_first_draw_ms
+#
+# Returns:
+#   0 - Parsing succeeded (3 lines printed)
+#   1 - Parsing failed (wrong number of events, parse error, etc.)
+parse_watchdog_timing() {
+    local logarchive_path="$1"
+    local bundle_id="$2"
+
+    if [ -z "$logarchive_path" ] || [ ! -d "$logarchive_path" ]; then
+        echo "Error: logarchive path '$logarchive_path' does not exist." >&2
+        return 1
+    fi
+    if [ -z "$bundle_id" ]; then
+        echo "Error: bundle_id is required for Watchdog event parsing." >&2
+        return 1
+    fi
+
+    # Extract Watchdog events as ndjson
+    local events_json
+    events_json=$(log show \
+        --predicate '(process == "SpringBoard") && (category == "Watchdog")' \
+        --info --style ndjson \
+        "$logarchive_path" 2>/dev/null)
+
+    if [ -z "$events_json" ]; then
+        echo "Error: No SpringBoard Watchdog events found in logarchive." >&2
+        return 1
+    fi
+
+    # Parse with Python, following runner.py logic (lines 825-931)
+    python3 -c "
 import json, sys
-with open(sys.argv[1]) as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-            proc = entry.get('processImagePath', '') or entry.get('process', '')
-            if sys.argv[2] in str(proc):
-                print(entry.get('timestamp', 'found'))
-                sys.exit(0)
-        except (json.JSONDecodeError, KeyError):
-            continue
-sys.exit(1)
-" "$_AML_DEVICE_LOG_STREAM_FILE" "$process_name" 2>/dev/null)
+from datetime import datetime
 
-            if [ -n "$ts" ]; then
-                echo "$ts"
-                return 0
-            fi
-            # grep matched but python3 didn't parse a valid entry yet —
-            # could be a partial write. Keep polling.
-        fi
-        sleep "$poll_interval"
-    done
+bundle_id = sys.argv[1]
+events = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        entry = json.loads(line)
+        msg = entry.get('eventMessage', '')
+        if bundle_id in msg and ('Now monitoring resource allowance' in msg or 'Stopped monitoring' in msg):
+            events.append(entry)
+    except (json.JSONDecodeError, KeyError):
+        continue
 
-    return 1  # timeout
+if len(events) < 4:
+    print(f'ERROR: Expected 4 Watchdog events for {bundle_id}, got {len(events)}', file=sys.stderr)
+    if events:
+        for e in events:
+            print(f'  Event: {e.get(\"eventMessage\", \"?\")[:120]}', file=sys.stderr)
+    sys.exit(1)
+
+# Use the last 4 events (in case there are extras from previous runs)
+events = events[-4:]
+e0, e1, e2, e3 = events
+
+# Validate event sequence
+if 'Now monitoring resource allowance of 20.00s' not in e0.get('eventMessage', ''):
+    print(f'ERROR: Invalid first event (expected 20.00s monitor start): {e0.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+if 'Stopped monitoring' not in e1.get('eventMessage', ''):
+    print(f'ERROR: Invalid second event (expected Stopped monitoring): {e1.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+if 'Now monitoring resource allowance of' not in e2.get('eventMessage', ''):
+    print(f'ERROR: Invalid third event (expected monitor start): {e2.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+if 'Stopped monitoring' not in e3.get('eventMessage', ''):
+    print(f'ERROR: Invalid fourth event (expected Stopped monitoring): {e3.get(\"eventMessage\", \"\")}', file=sys.stderr)
+    sys.exit(1)
+
+# Parse timestamps
+fmt = '%Y-%m-%d %H:%M:%S.%f%z'
+t0 = datetime.strptime(e0['timestamp'], fmt)
+t1 = datetime.strptime(e1['timestamp'], fmt)
+t2 = datetime.strptime(e2['timestamp'], fmt)
+t3 = datetime.strptime(e3['timestamp'], fmt)
+
+time_to_main_ms = (t1 - t0).total_seconds() * 1000
+time_to_first_draw_ms = (t3 - t2).total_seconds() * 1000
+total_ms = time_to_main_ms + time_to_first_draw_ms
+
+print(f'{total_ms:.2f}')
+print(f'{time_to_main_ms:.2f}')
+print(f'{time_to_first_draw_ms:.2f}')
+" "$bundle_id" <<< "$events_json"
+}
+
+# Extract the device-side timestamp of the last Watchdog event from a logarchive.
+# Used by the warmup iteration to establish a device time reference, avoiding
+# host-device clock drift issues (same technique as runner.py lines 859-863).
+#
+# Arguments:
+#   $1 - logarchive_path  Path to the .logarchive directory
+#   $2 - bundle_id        App bundle identifier
+#
+# Output (stdout): timestamp string in "YYYY-MM-DD HH:MM:SS.ffffff±ZZZZ" format
+#                  (empty if no events found)
+#
+# Returns:
+#   0 - Timestamp found
+#   1 - No matching events
+get_last_watchdog_timestamp() {
+    local logarchive_path="$1"
+    local bundle_id="$2"
+
+    if [ -z "$logarchive_path" ] || [ ! -d "$logarchive_path" ]; then
+        return 1
+    fi
+
+    local events_json
+    events_json=$(log show \
+        --predicate '(process == "SpringBoard") && (category == "Watchdog")' \
+        --info --style ndjson \
+        "$logarchive_path" 2>/dev/null)
+
+    if [ -z "$events_json" ]; then
+        return 1
+    fi
+
+    python3 -c "
+import json, sys
+
+bundle_id = sys.argv[1]
+last_ts = None
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        entry = json.loads(line)
+        msg = entry.get('eventMessage', '')
+        if bundle_id in msg and ('Now monitoring resource allowance' in msg or 'Stopped monitoring' in msg):
+            last_ts = entry.get('timestamp', '')
+    except (json.JSONDecodeError, KeyError):
+        continue
+
+if last_ts:
+    print(last_ts)
+else:
+    sys.exit(1)
+" "$bundle_id" <<< "$events_json"
+}
+
+# Advance a device-side Watchdog timestamp by N seconds.
+# Used to compute the --start argument for the next iteration's log collect,
+# avoiding overlap with events from the current iteration.
+#
+# Arguments:
+#   $1 - timestamp  Device-side timestamp (e.g., "2024-01-15 10:30:45.123456+0000")
+#   $2 - seconds    Seconds to add (default: 1)
+#
+# Output (stdout): adjusted timestamp in "YYYY-MM-DD HH:MM:SS±HHMM" format
+#                  (suitable for `sudo log collect --start`)
+advance_timestamp() {
+    local timestamp="$1"
+    local seconds="${2:-1}"
+
+    python3 -c "
+from datetime import datetime, timedelta
+import sys
+
+ts_str = sys.argv[1]
+delta_s = int(sys.argv[2])
+
+# Parse device timestamp (format: 'YYYY-MM-DD HH:MM:SS.ffffff±ZZZZ')
+fmt = '%Y-%m-%d %H:%M:%S.%f%z'
+dt = datetime.strptime(ts_str, fmt)
+dt = dt + timedelta(seconds=delta_s)
+
+# Output in the format expected by 'log collect --start'
+print(dt.strftime('%Y-%m-%d %H:%M:%S%z'))
+" "$timestamp" "$seconds"
 }
 
 # =============================================================================
@@ -495,6 +627,12 @@ launch_app_on_device() {
 # Terminate a running app on a physical iOS device.
 # Best-effort — does not fail if the app is not running.
 #
+# NOTE: `xcrun devicectl device process terminate` requires --pid, not a
+# bundle ID. Since we don't always have the PID, this function is a
+# best-effort no-op. The actual termination happens via the
+# --terminate-existing flag on `launch_app_on_device()`, which kills any
+# existing instance of the app before launching a new one.
+#
 # Arguments:
 #   $1 - device_udid  UDID of the target device
 #   $2 - bundle_id    Bundle identifier of the app
@@ -511,12 +649,10 @@ terminate_app_on_device() {
         return 0  # nothing to do
     fi
 
-    # devicectl does not have a direct "terminate by bundle ID" command.
-    # Use xcrun devicectl device process terminate if a PID is known,
-    # otherwise fall back to launching with --terminate-existing which
-    # terminates any existing instance as a side effect. For clean
-    # termination, we attempt the pkill-style approach via devicectl.
-    # If that fails, it's best-effort — the app may not be running.
+    # Best-effort: try to terminate. This may fail because devicectl
+    # process terminate requires --pid, but we attempt it anyway in case
+    # future devicectl versions support bundle ID termination.
+    # The primary termination mechanism is --terminate-existing on launch.
     xcrun devicectl device process terminate --device "$device_udid" "$bundle_id" 2>/dev/null || true
     return 0
 }
