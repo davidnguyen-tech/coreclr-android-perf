@@ -363,8 +363,8 @@ fi
 # Uses the same approach as dotnet/performance's runner.py:
 #   - Iteration 0 is a warmup to establish device-side time reference
 #   - Subsequent iterations measure startup via SpringBoard Watchdog events
-#   - Inter-iteration wait is 10 seconds (matching runner.py)
-#   - Each iteration: launch → wait 5s → collect logs → parse Watchdog events
+#   - Inter-iteration wait is 3s (uninstall/reinstall provides additional settling)
+#   - Each iteration: launch → wait 3s → collect logs → terminate → parse events
 #
 # NOTE: Unlike runner.py which keeps the app installed between iterations (warm starts),
 # we uninstall/reinstall each iteration to measure cold-start performance consistently.
@@ -381,13 +381,18 @@ FAILED_COUNT=0
 # The warmup iteration updates it to a device-side timestamp.
 NEXT_COLLECT_START=""
 
-for ((i = 0; i <= ITERATIONS; i++)); do
-    # Clean state: terminate any running instance
-    terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+# APP_PID tracks the PID of the launched app for reliable termination.
+APP_PID=""
 
-    # Wait between iterations (10s, same as runner.py)
+for ((i = 0; i <= ITERATIONS; i++)); do
+    # Clean state: terminate any running instance (using PID from previous iteration)
+    terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" "$APP_PID"
+    APP_PID=""
+
+    # Wait between iterations — 3s is sufficient since uninstall/reinstall
+    # provides additional settling time (~4-7s of I/O).
     if [ $i -gt 0 ]; then
-        sleep 10
+        sleep 3
     else
         # Shorter wait before warmup
         sleep 2
@@ -418,32 +423,36 @@ for ((i = 0; i <= ITERATIONS; i++)); do
         COLLECT_START="$NEXT_COLLECT_START"
     fi
 
-    # Launch the app on the device
-    LAUNCH_OUTPUT=$(launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" 2>&1)
+    # Launch the app on the device — capture PID from stdout for later termination
+    APP_PID=$(launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" 2>/tmp/ios_launch_stderr.txt)
     LAUNCH_RESULT=$?
 
     if [ $LAUNCH_RESULT -ne 0 ]; then
+        LAUNCH_ERRORS=$(cat /tmp/ios_launch_stderr.txt 2>/dev/null)
         if [ $i -eq 0 ]; then
             echo "Error: Warmup failed — could not launch app on device."
-            echo "  $LAUNCH_OUTPUT" | head -3
+            echo "  $LAUNCH_ERRORS" | head -3
             exit 1
         fi
         echo "  [$i/$ITERATIONS] FAILED — devicectl launch returned $LAUNCH_RESULT"
-        echo "    $LAUNCH_OUTPUT" | head -3
+        echo "    $LAUNCH_ERRORS" | head -3
         FAILED_COUNT=$((FAILED_COUNT + 1))
+        APP_PID=""
         continue
     fi
 
-    # Wait for the app to fully start (5s, same as runner.py)
-    sleep 5
+    # Wait for the app to fully start — 3s is sufficient for apps that start
+    # in ~250ms, allowing time for the OS to emit all Watchdog events.
+    sleep 3
 
     # Collect device logs for this iteration
     LOGARCHIVE="/tmp/ios_startup_iteration_${i}.logarchive"
     COLLECT_OUTPUT=$(collect_device_logs "$DEVICE_UDID" "$COLLECT_START" "$LOGARCHIVE" 2>&1)
     COLLECT_RESULT=$?
 
-    # Terminate the app now that logs are collected
-    terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+    # Terminate the app now that logs are collected (using captured PID)
+    terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" "$APP_PID"
+    APP_PID=""
 
     if [ $COLLECT_RESULT -ne 0 ]; then
         if [ $i -eq 0 ]; then
@@ -487,6 +496,8 @@ for ((i = 0; i <= ITERATIONS; i++)); do
     fi
 
     # --- Real measurement iteration ---
+    # parse_watchdog_timing returns 4 lines: total_ms, main_ms, draw_ms, last_timestamp
+    # This avoids a separate get_last_watchdog_timestamp() call (saving 1-3s per iteration).
     TIMING=$(parse_watchdog_timing "$LOGARCHIVE" "$BUNDLE_ID" 2>&1)
     PARSE_RESULT=$?
 
@@ -501,9 +512,9 @@ for ((i = 0; i <= ITERATIONS; i++)); do
     TOTAL_MS=$(echo "$TIMING" | sed -n '1p')
     TIME_TO_MAIN=$(echo "$TIMING" | sed -n '2p')
     TIME_TO_DRAW=$(echo "$TIMING" | sed -n '3p')
+    LAST_TS=$(echo "$TIMING" | sed -n '4p')
 
-    # Update device-side reference for next iteration
-    LAST_TS=$(get_last_watchdog_timestamp "$LOGARCHIVE" "$BUNDLE_ID")
+    # Update device-side reference for next iteration (from parse_watchdog_timing line 4)
     if [ -n "$LAST_TS" ]; then
         NEXT_COLLECT_START=$(advance_timestamp "$LAST_TS" 1)
     fi
@@ -513,8 +524,6 @@ for ((i = 0; i <= ITERATIONS; i++)); do
 
     # Cleanup logarchive
     rm -rf "$LOGARCHIVE"
-
-    sleep 2
 done
 
 # ---------------------------------------------------------------------------

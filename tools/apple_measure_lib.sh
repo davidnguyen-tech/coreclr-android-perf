@@ -307,7 +307,8 @@ collect_device_logs() {
 }
 
 # Parse SpringBoard Watchdog events from a .logarchive file.
-# Extracts time-to-main and time-to-first-draw for a given bundle ID.
+# Extracts time-to-main and time-to-first-draw for a given bundle ID,
+# plus the timestamp of the last event (for device-side time reference).
 #
 # SpringBoard emits 4 Watchdog events during app startup:
 #   1. "Now monitoring resource allowance of 20.00s" — OS starts watching main()
@@ -319,17 +320,23 @@ collect_device_logs() {
 # Time-to-draw    = Event 4 timestamp - Event 3 timestamp
 # Total startup   = time-to-main + time-to-draw
 #
+# This function also returns the last event's timestamp, eliminating the need
+# for a separate get_last_watchdog_timestamp() call (which would re-read the
+# same logarchive). The caller uses this timestamp to set the --start window
+# for the next iteration's log collection.
+#
 # Arguments:
 #   $1 - logarchive_path  Path to the .logarchive directory
 #   $2 - bundle_id        App bundle identifier (e.g., "com.companyname.myapp")
 #
-# Output (stdout, 3 lines on success):
+# Output (stdout, 4 lines on success):
 #   Line 1: total_ms      (time-to-main + time-to-first-draw)
 #   Line 2: time_to_main_ms
 #   Line 3: time_to_first_draw_ms
+#   Line 4: last_event_timestamp (e.g., "2024-01-15 10:30:45.123456+0000")
 #
 # Returns:
-#   0 - Parsing succeeded (3 lines printed)
+#   0 - Parsing succeeded (4 lines printed)
 #   1 - Parsing failed (wrong number of events, parse error, etc.)
 parse_watchdog_timing() {
     local logarchive_path="$1"
@@ -414,15 +421,23 @@ time_to_main_ms = (t1 - t0).total_seconds() * 1000
 time_to_first_draw_ms = (t3 - t2).total_seconds() * 1000
 total_ms = time_to_main_ms + time_to_first_draw_ms
 
+# Line 1: total ms, Line 2: time-to-main ms, Line 3: time-to-draw ms
+# Line 4: last event timestamp (for device-side time reference)
 print(f'{total_ms:.2f}')
 print(f'{time_to_main_ms:.2f}')
 print(f'{time_to_first_draw_ms:.2f}')
+print(e3['timestamp'])
 " "$bundle_id" <<< "$events_json"
 }
 
 # Extract the device-side timestamp of the last Watchdog event from a logarchive.
 # Used by the warmup iteration to establish a device time reference, avoiding
 # host-device clock drift issues (same technique as runner.py lines 859-863).
+#
+# DEPRECATED for real measurement iterations: parse_watchdog_timing() now
+# returns the last event timestamp as its 4th output line, eliminating the
+# need for a separate log show call. This function is retained for the warmup
+# iteration where we only need the timestamp (not the timing data).
 #
 # Arguments:
 #   $1 - logarchive_path  Path to the .logarchive directory
@@ -613,15 +628,25 @@ install_app_on_device() {
 # Uses `xcrun devicectl device process launch` (Xcode 15+).
 # Terminates any existing instance of the app before launching.
 #
+# On success, prints the launched process PID to stdout. The caller can
+# capture it and later pass it to terminate_app_on_device() for reliable
+# termination (devicectl terminate requires --pid, not bundle ID).
+#
 # Arguments:
 #   $1 - device_udid  UDID of the target device
 #   $2 - bundle_id    Bundle identifier of the app (e.g., "com.companyname.myapp")
+#
+# Output (stdout): PID of the launched process (integer), or empty if PID
+#                  could not be parsed (launch still succeeded).
 #
 # Returns:
 #   0 - App launched successfully
 #   1 - Launch failed
 #
-# Usage: launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+# Usage:
+#   APP_PID=$(launch_app_on_device "$DEVICE_UDID" "$BUNDLE_ID")
+#   # ... measure ...
+#   terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" "$APP_PID"
 launch_app_on_device() {
     local device_udid="$1"
     local bundle_id="$2"
@@ -635,45 +660,90 @@ launch_app_on_device() {
         return 1
     fi
 
-    xcrun devicectl device process launch --terminate-existing --device "$device_udid" "$bundle_id" 2>&1
+    # Use --json-output to reliably extract the PID of the launched process.
+    # The text output format varies across Xcode versions, but JSON is stable.
+    local json_file
+    json_file=$(mktemp /tmp/devicectl_launch.XXXXXX.json)
+
+    local launch_output
+    launch_output=$(xcrun devicectl device process launch \
+        --terminate-existing \
+        --device "$device_udid" \
+        --json-output "$json_file" \
+        "$bundle_id" 2>&1)
     local exit_code=$?
+
     if [ $exit_code -ne 0 ]; then
         echo "Error: Failed to launch $bundle_id on device $device_udid (exit code $exit_code)." >&2
+        echo "  $launch_output" >&2
+        rm -f "$json_file"
         return 1
+    fi
+
+    # Extract PID from JSON output. The structure is:
+    #   { "result": { "process": { "processIdentifier": <pid>, ... } } }
+    # Fall back to text parsing if JSON fails.
+    local pid=""
+    if [ -f "$json_file" ]; then
+        pid=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    pid = data.get('result', {}).get('process', {}).get('processIdentifier')
+    if pid is not None:
+        print(int(pid))
+except Exception:
+    pass
+" "$json_file" 2>/dev/null)
+    fi
+
+    rm -f "$json_file"
+
+    # If JSON parsing failed, try to extract PID from text output.
+    # Known patterns: "Launched process <PID>" or "pid: <PID>"
+    if [ -z "$pid" ] && [ -n "$launch_output" ]; then
+        pid=$(echo "$launch_output" | grep -oE '[Pp]rocess ([Ii]dentifier: |)[0-9]+' | grep -oE '[0-9]+' | tail -1)
+    fi
+
+    if [ -n "$pid" ]; then
+        echo "$pid"
     fi
     return 0
 }
 
 # Terminate a running app on a physical iOS device.
-# Best-effort — does not fail if the app is not running.
+# Best-effort — does not fail if the app is not running or termination fails.
 #
-# NOTE: `xcrun devicectl device process terminate` requires --pid, not a
-# bundle ID. Since we don't always have the PID, this function is a
-# best-effort no-op. The actual termination happens via the
-# --terminate-existing flag on `launch_app_on_device()`, which kills any
-# existing instance of the app before launching a new one.
+# When a PID is provided (captured from launch_app_on_device), uses
+# `xcrun devicectl device process terminate --pid <PID>` for reliable
+# termination. Without a PID, this is a no-op since devicectl terminate
+# does not support bundle-ID-based termination.
 #
 # Arguments:
 #   $1 - device_udid  UDID of the target device
-#   $2 - bundle_id    Bundle identifier of the app
+#   $2 - bundle_id    Bundle identifier of the app (for logging only)
+#   $3 - pid          (optional) Process ID from launch_app_on_device
 #
 # Returns:
 #   0 - Always (best-effort cleanup)
 #
-# Usage: terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID"
+# Usage: terminate_app_on_device "$DEVICE_UDID" "$BUNDLE_ID" "$APP_PID"
 terminate_app_on_device() {
     local device_udid="$1"
     local bundle_id="$2"
+    local pid="$3"
 
-    if [ -z "$device_udid" ] || [ -z "$bundle_id" ]; then
+    if [ -z "$device_udid" ]; then
         return 0  # nothing to do
     fi
 
-    # Best-effort: try to terminate. This may fail because devicectl
-    # process terminate requires --pid, but we attempt it anyway in case
-    # future devicectl versions support bundle ID termination.
-    # The primary termination mechanism is --terminate-existing on launch.
-    xcrun devicectl device process terminate --device "$device_udid" "$bundle_id" 2>/dev/null || true
+    # With a valid PID, we can reliably terminate the process
+    if [ -n "$pid" ]; then
+        xcrun devicectl device process terminate \
+            --device "$device_udid" --pid "$pid" 2>/dev/null || true
+    fi
+    # Without a PID, we can't do anything — devicectl terminate requires --pid.
+    # The next launch with --terminate-existing or uninstall will clean up.
     return 0
 }
 
