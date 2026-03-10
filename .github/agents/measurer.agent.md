@@ -131,3 +131,5 @@ After uploading:
 - `prepare.sh` resets the environment — always verify `tools/apple_measure_lib.sh` exists after running it
 - MAUI workload resolution requires sibling platform workloads (ios needs maccatalyst and vice versa)
 - Mac Catalyst and macOS have high measurement variance — use median, not average, as the primary metric
+- **Physical iOS device logs require `sudo log collect --device`, not `log stream`** — The host `log stream` cannot see device process logs. Use `sudo log collect --device` for post-hoc log collection, then `log show <logarchive>` to parse events. This requires passwordless sudo configured for `/usr/bin/log`.
+- **Always verify CLI tool flags exist before building features around them** — Run `<command> --help` and test the exact command invocation before implementing. Don't assume a flag exists because a similar command has it.
