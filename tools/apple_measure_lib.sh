@@ -141,6 +141,7 @@ _AML_LOG_STREAM_FILE=""
 #
 # Usage: start_log_stream "process == \"MyApp\"" 0.5
 start_log_stream() {
+    stop_log_stream
     local predicate="$1"
     local settle="${2:-0.5}"
 
@@ -277,7 +278,7 @@ wait_for_process() {
 
 # Compute statistics from an array of timing values.
 # Outputs 6 lines: avg, median, min, max, stdev, count
-# All values are formatted to 2 decimal places.
+# Numeric values are formatted to 2 decimal places; count is an integer.
 #
 # Requires at least 1 value. Stdev is 0.00 for a single value.
 #
