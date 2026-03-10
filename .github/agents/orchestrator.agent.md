@@ -97,6 +97,13 @@ Your context window is finite. Prevent overflow with these rules:
 - **Discard sub-agent verbose output** — after confirming a sub-agent succeeded, do not repeat its output. Summarize in one line and move on.
 - **Between steps, forget previous step details.** Only carry forward: the PR number/branch that merged, and the current step number. Re-read `plan.md` for the next step's tasks.
 
+## Measurement Results
+
+- Measurement results (CSVs, traces) are ephemeral and must NEVER be committed to the repo. The `results/` directory is gitignored.
+- After measurements complete, always publish results to a **secret gist** using `gh gist create`. Upload at minimum `results/summary.csv` and optionally the per-app detail CSVs.
+- Use a descriptive gist filename that includes the platform and date, e.g., `startup-results-maccatalyst-2026-03-10.csv`.
+- Print the gist URL in the output so the user can access it.
+
 ## Learning from Mistakes
 
 When an agent makes a mistake (build failure, incorrect assumption, missed edge case) or a reviewer finds an issue, don't just fix it — **backtrack to understand WHY** it happened.
