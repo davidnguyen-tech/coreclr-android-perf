@@ -8,9 +8,7 @@ iOS-specific build configurations, workarounds, and tooling for CoreCLR startup 
 - **Physical iPhone** (arm64) for device measurements (`--platform ios`)
 - **iOS Simulator** for simulator measurements (`--platform ios-simulator`) — no physical device or code signing required
 - **Apple Developer account** with a valid provisioning profile for physical device deployment
-- **xharness** CLI tool (installed automatically by `prepare.sh`) — used for physical device deployment only
-- **Python 3** for dotnet/performance test harness
-- **sudo access** may be required for `log collect` (unified log collection, physical device only)
+- **Xcode 15+** for `xcrun devicectl` (device interaction and app management)
 
 ## Build Configurations
 
@@ -103,11 +101,13 @@ iOS apps are built as `.app` directory bundles (not single files like Android AP
 
 ## Device Deployment
 
-iOS app deployment and startup measurement uses:
+iOS physical device startup measurement uses the dedicated `ios/measure_device_startup.sh` script:
 
-- **xharness** for app installation and management
-- **xcrun devicectl** for device interaction and app launching
-- The `dotnet/performance` submodule's `genericiosstartup` scenario handles the measurement harness
+- **`xcrun devicectl`** for app installation, launching, and termination
+- **`log stream --device`** for timing detection (first log event from the app process)
+- **Code signing** is required — the app must be signed with a valid development certificate and provisioning profile
+
+> **Note:** Previous versions used `dotnet/performance`'s `test.py` with `sudo log collect --device`, which hangs on modern macOS/iOS combinations. The dedicated script bypasses `test.py` entirely.
 
 ## Simulator Support
 
@@ -184,6 +184,76 @@ For `.nettrace` trace collection on the simulator, use:
 
 The simulator runs locally, so nettrace collection uses a **direct Unix-domain diagnostic socket** — no `dotnet-dsrouter` bridge is needed. This follows the same pattern as macOS and Mac Catalyst local tracing.
 
+## Device Measurement
+
+Physical iOS device measurement uses `ios/measure_device_startup.sh` for direct device interaction via `xcrun devicectl`, bypassing `test.py`.
+
+### Prerequisites
+
+- Physical iPhone/iPad connected via **USB** (WiFi may work but is less reliable for log streaming)
+- Device must be **unlocked and trusted**
+- **Developer Mode** enabled (Settings > Privacy & Security > Developer Mode)
+- Valid **code signing identity** (Xcode-managed automatic signing is recommended)
+- **Xcode 15+** (required for `xcrun devicectl`)
+
+> **Note:** Passwordless `sudo` is NOT required for device measurement — the dedicated script uses `log stream --device` which does not require elevated privileges.
+
+### Quick Start (Device)
+
+```bash
+# Prepare (installs SDK, workloads, generates apps)
+./prepare.sh --platform ios
+
+# Build
+./build.sh --platform ios dotnet-new-ios CORECLR_JIT build 1
+
+# Measure startup
+./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios
+
+# Or call the dedicated script directly
+./ios/measure_device_startup.sh dotnet-new-ios CORECLR_JIT
+
+# Sweep all configs
+./measure_all.sh --platform ios --startup-iterations 10
+```
+
+### How It Works
+
+- **RID**: `ios-arm64` — physical iOS devices are always arm64
+- **Measurement**: `ios/measure_device_startup.sh` monitors `log stream --device` for the first log event from the app process after launch via `xcrun devicectl`. This captures process creation, dyld loading, .NET runtime initialization, and early framework setup.
+- **Code signing**: Required — Apple Developer account with provisioning profile. The script does not manage signing — it relies on the developer's Xcode signing configuration.
+- **No `sudo`**: Unlike the legacy `test.py` path, the dedicated script does NOT use `sudo log collect --device`.
+
+### Device Auto-Detection
+
+When no device is specified, the script automatically:
+
+1. Queries `xcrun devicectl list devices` for connected iOS devices.
+2. Selects the first available device.
+3. Displays device name and iOS version for confirmation.
+
+You can also specify a device explicitly:
+
+```bash
+# By UDID (run `xcrun devicectl list devices` to find your device's UDID)
+./ios/measure_device_startup.sh dotnet-new-ios CORECLR_JIT --device-udid XXXXXXXX-XXXXXXXXXXXX
+```
+
+> **Tip:** By default, the script auto-detects a connected device. Use `--device-udid` only when multiple devices are connected and you need to target a specific one.
+
+### Device `measure_device_startup.sh` Options
+
+```
+Usage: ios/measure_device_startup.sh <app-name> <build-config> [options]
+
+Options:
+  --startup-iterations N   Number of startup iterations (default: 10)
+  --device-udid UDID       Target a specific device (auto-detect if omitted)
+  --no-build               Skip building, use existing .app bundle
+  --package-path PATH      Path to pre-built .app bundle (implies --no-build)
+  --collect-trace          Collect .nettrace trace (not yet supported for device)
+```
+
 ## File Structure
 
 ```
@@ -192,6 +262,7 @@ ios/
 ├── build-configs.props             # 6 build configuration presets
 ├── build-workarounds.targets       # iOS-specific build targets
 ├── collect_nettrace.sh             # .nettrace trace collection (device via dsrouter, simulator via direct socket)
-├── measure_simulator_startup.sh    # Simulator startup measurement (wall-clock timing)
+├── measure_device_startup.sh       # Physical device startup measurement (device log stream timing)
+├── measure_simulator_startup.sh    # Simulator startup measurement (host log stream timing)
 └── print_app_sizes.sh              # .app bundle size reporting
 ```
