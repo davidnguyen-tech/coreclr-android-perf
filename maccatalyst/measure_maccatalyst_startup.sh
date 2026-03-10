@@ -334,7 +334,6 @@ if [ "$COLLECT_TRACE" = true ]; then
     echo "  [trace] Trace output: $TRACE_OUTPUT_PATH"
 
     "$APP_EXECUTABLE" &
-    TRACE_APP_PID=$!
 
     # Wait for the app window to appear (confirms startup completed)
     if wait_for_window "$EXECUTABLE_NAME" 60; then

@@ -606,11 +606,19 @@ collect_nettrace() {
         fi
     fi
 
-    # Search additional directories for .nettrace files
+    # Search additional directories for .nettrace files matching the expected name pattern.
+    # Derive a scoped glob from the expected filename (strip PID suffix) to avoid matching
+    # stale traces from previous runs.
+    local expected_basename
+    expected_basename=$(basename "$expected_path" .nettrace)
+    # Strip trailing _<PID> (digits after last underscore) to get the app/config prefix
+    local name_pattern
+    name_pattern=$(echo "$expected_basename" | sed 's/_[0-9]*$//')
+
     for dir in $search_dirs; do
         if [ -d "$dir" ]; then
             local found
-            found=$(find "$dir" -name "*.nettrace" -size +1k 2>/dev/null | head -1)
+            found=$(find "$dir" -name "${name_pattern}*.nettrace" -size +1k 2>/dev/null | head -1)
             if [ -n "$found" ]; then
                 local file_size
                 file_size=$(wc -c < "$found" | tr -d ' ')
