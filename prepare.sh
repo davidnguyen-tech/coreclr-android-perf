@@ -138,9 +138,9 @@ case "$PLATFORM" in
     android|android-emulator)
                   WORKLOADS="android maui-android" ;;
     ios|ios-simulator)
-                  WORKLOADS="ios maui-ios" ;;
+                  WORKLOADS="ios maui-ios maccatalyst" ;;
     osx)          WORKLOADS="macos" ;;
-    maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst" ;;
+    maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst ios" ;;
 esac
 echo "Installing workloads for $PLATFORM: $WORKLOADS"
 
