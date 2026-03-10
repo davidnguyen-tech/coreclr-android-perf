@@ -52,7 +52,7 @@ fi
 # Verify passwordless sudo for /usr/bin/log (required for device log collection).
 # We test the actual command rather than `sudo -n true` because users may configure
 # NOPASSWD only for /usr/bin/log (not all commands).
-if ! sudo -n /usr/bin/log help 2>/dev/null; then
+if ! sudo -n /usr/bin/log collect --help 2>/dev/null; then
     echo "Error: Passwordless sudo is required for 'sudo log collect --device'."
     echo ""
     echo "Configure passwordless sudo for /usr/bin/log by adding this to /etc/sudoers (via visudo):"
