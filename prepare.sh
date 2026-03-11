@@ -5,7 +5,7 @@ source "$(dirname "$0")/init.sh"
 # Validate passed parameters
 FORCE=false
 USE_ROLLBACK=true
-PLATFORM="android"
+PLATFORM=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -42,6 +42,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate platform
+if [ -z "$PLATFORM" ]; then
+    echo "Error: --platform is required."
+    echo "Usage: $0 [-f] [-userollback true|false (default: true)] --platform android|ios"
+    exit 1
+fi
 case "$PLATFORM" in
     android|ios) ;;
     *)

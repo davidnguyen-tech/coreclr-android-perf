@@ -22,12 +22,12 @@ Repository for measuring startup performance, build times, and app sizes of .NET
 2. Prepare the environment:
 
     ```bash
-    ./prepare.sh
+    ./prepare.sh --platform android
     ```
 
     This will:
     - Install the .NET SDK version pinned in `global.json` into `.dotnet/`
-    - Install Android and MAUI workloads
+    - Install platform-specific workloads (pinned via `rollback.json` by default)
     - Install the `xharness` CLI tool
     - Initialize the `dotnet/performance` submodule
     - Generate sample apps via `dotnet new` templates
@@ -54,14 +54,14 @@ Repository for measuring startup performance, build times, and app sizes of .NET
 The .NET SDK version is pinned in [`global.json`](./global.json). To test against a different SDK build:
 
 1. Edit `global.json` and update the `version` field
-2. Run `./prepare.sh -f` to reinstall
+2. Run `./prepare.sh -f --platform <android|ios>` to reinstall
 
 ## Workload Version Pinning
 
-Workload versions can be pinned using [`rollback.json`](./rollback.json):
+Workload versions are pinned by default using [`rollback.json`](./rollback.json). To use the latest workload manifests instead:
 
 ```bash
-./prepare.sh -f -userollback
+./prepare.sh -f -userollback false --platform android
 ```
 
 ## Performance Measurements
