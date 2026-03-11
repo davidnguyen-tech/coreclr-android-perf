@@ -4,7 +4,7 @@ source "$(dirname "$0")/init.sh"
 
 # Validate passed parameters
 FORCE=false
-USE_ROLLBACK=false
+USE_ROLLBACK=true
 PLATFORM="android"
 
 while [[ $# -gt 0 ]]; do
@@ -14,8 +14,16 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -userollback)
-            USE_ROLLBACK=true
-            shift
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: -userollback requires a value (true, false)"
+                exit 1
+            fi
+            if [[ "$2" != "true" && "$2" != "false" ]]; then
+                echo "Error: -userollback value must be 'true' or 'false'"
+                exit 1
+            fi
+            USE_ROLLBACK=$2
+            shift 2
             ;;
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
@@ -27,7 +35,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Error: Invalid parameter '$1'."
-            echo "Usage: $0 [-f] [-userollback] [--platform android|ios]"
+            echo "Usage: $0 [-f] [-userollback true|false (default: true)] [--platform android|ios]"
             exit 1
             ;;
     esac
@@ -175,7 +183,7 @@ echo "dotnet-trace: $("$TOOLS_DIR/dotnet-trace" --version 2>/dev/null || echo 'i
 
 # Initialize the dotnet/performance submodule
 echo "Initializing dotnet/performance submodule..."
-if [ -f "$SCRIPT_DIR/external/performance/README.md" ]; then
+if [ -f "$SCRIPT_DIR/external/performance/README.md" ] && [ "$FORCE" = false ]; then
     echo "Submodule already populated, skipping."
 else
     git -C "$SCRIPT_DIR" submodule update --init --recursive
