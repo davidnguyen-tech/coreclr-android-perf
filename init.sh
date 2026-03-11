@@ -171,7 +171,10 @@ generate_local_build_props() {
 $crossgen2_prop
   </PropertyGroup>
   <ItemGroup>
-    <FrameworkReference Update="Microsoft.NETCore.App" RuntimeFrameworkVersion="$LOCAL_RUNTIME_VERSION" />
+    <KnownFrameworkReference Update="Microsoft.NETCore.App"
+                             DefaultRuntimeFrameworkVersion="$LOCAL_RUNTIME_VERSION"
+                             LatestRuntimeFrameworkVersion="$LOCAL_RUNTIME_VERSION"
+                             TargetingPackVersion="$LOCAL_RUNTIME_VERSION" />
   </ItemGroup>
 </Project>
 EOF
