@@ -11,21 +11,21 @@ iOS-specific performance measurement scripts and configurations.
 
 The startup measurement flow (`runner.py`) calls `sudo log collect --device` to capture iOS system logs. By default this blocks waiting for a password, which hangs the measurement scripts.
 
-To allow `log collect` to run without a password prompt:
+To allow `log collect` to run without a password prompt, add a NOPASSWD entry via `visudo`:
 
 ```bash
-echo '%admin ALL=(ALL) NOPASSWD: /usr/bin/log collect *' | sudo tee /etc/sudoers.d/log-collect
-sudo chmod 440 /etc/sudoers.d/log-collect
+sudo visudo
 ```
 
-Verify with:
+Add the following line at the end of the file:
 
-```bash
-sudo visudo -cf /etc/sudoers.d/log-collect
-# Expected: /etc/sudoers.d/log-collect: parsed OK
+```
+%admin ALL=(ALL) NOPASSWD: /usr/bin/log collect
 ```
 
-To undo: `sudo rm /etc/sudoers.d/log-collect`
+Save and exit (`visudo` validates syntax before writing).
+
+To undo: run `sudo visudo` and remove the line you added.
 
 ## Contents
 
