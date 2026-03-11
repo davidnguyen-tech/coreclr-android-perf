@@ -55,6 +55,9 @@ case "$PLATFORM" in
         ;;
 esac
 
+# Save the selected platform for other scripts to detect
+echo "$PLATFORM" > "$PLATFORM_FILE"
+
 # Check if environment is already set up
 if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$FORCE" = false ]; then
     echo "The environment is already set up. If you want to reset it, pass the -f parameter to the script."

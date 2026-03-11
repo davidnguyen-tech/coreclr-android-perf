@@ -18,6 +18,16 @@ TRACES_DIR="$SCRIPT_DIR/traces"
 RESULTS_DIR="$SCRIPT_DIR/results"
 ANDROID_DIR="$SCRIPT_DIR/android"
 IOS_DIR="$SCRIPT_DIR/ios"
+PLATFORM_FILE="$SCRIPT_DIR/.platform"
+
+# Read the platform saved by prepare.sh, or return empty string if not set.
+read_prepared_platform() {
+    if [ -f "$PLATFORM_FILE" ]; then
+        cat "$PLATFORM_FILE"
+    else
+        echo ""
+    fi
+}
 
 # Platform configuration
 # Usage: resolve_platform_config <platform>

@@ -64,6 +64,7 @@ apps/
 perfdata/
 traces/
 results/
+.platform
 [Nn]u[Gg]et.config
 profiles/
 profiles-old/

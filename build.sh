@@ -2,8 +2,8 @@
 
 source "$(dirname "$0")/init.sh"
 
-# Extract --platform flag from arguments, default to android
-PLATFORM="android"
+# Extract --platform flag from arguments, default to prepared platform
+PLATFORM="$(read_prepared_platform)"
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in

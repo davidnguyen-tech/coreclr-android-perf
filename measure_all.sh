@@ -5,7 +5,7 @@ source "$(dirname "$0")/init.sh"
 ALL_CONFIGS_ANDROID=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R" "R2R_COMP" "R2R_COMP_PGO")
 # Non-composite R2R is not supported on iOS (MachO only supports composite R2R images)
 ALL_CONFIGS_IOS=("MONO_JIT" "MONO_AOT" "MONO_PAOT" "CORECLR_JIT" "R2R_COMP" "R2R_COMP_PGO")
-PLATFORM="android"
+PLATFORM="$(read_prepared_platform)"
 
 ITERATIONS=10
 EXTRA_ARGS=()
@@ -17,7 +17,7 @@ print_usage() {
     echo "Runs startup measurements for all (app, config) combinations."
     echo ""
     echo "Options:"
-    echo "  --platform <name>          Target platform: android, ios (default: android)"
+    echo "  --platform <name>          Target platform: android, ios (default: from prepare.sh)"
     echo "  --app <name>               Measure only this app (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
     echo "  --help                     Show this help message"

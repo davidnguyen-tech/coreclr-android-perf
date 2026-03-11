@@ -25,7 +25,7 @@ print_usage() {
     echo "Build configs: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
-    echo "  --platform <android|ios>      Target platform (default: android)"
+    echo "  --platform <android|ios>      Target platform (default: from prepare.sh)"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -43,7 +43,7 @@ BUILD_CONFIG=$2
 shift 2
 
 # Parse options to extract --platform before passing remaining args to test.py
-PLATFORM="android"
+PLATFORM="$(read_prepared_platform)"
 PASSTHROUGH_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
