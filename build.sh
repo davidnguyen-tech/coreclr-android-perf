@@ -2,8 +2,10 @@
 
 source "$(dirname "$0")/init.sh"
 
-# Extract --platform flag from arguments, default to prepared platform
+# Extract --platform and --local-runtime flags from arguments, default to prepared platform
 PLATFORM="$(read_prepared_platform)"
+LOCAL_RUNTIME_PATH=""
+LOCAL_RUNTIME_CONFIG="Release"
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -18,6 +20,22 @@ while [[ $# -gt 0 ]]; do
         --platform=*)
             PLATFORM="${1#*=}"
             shift
+            ;;
+        --local-runtime)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --local-runtime requires a path to the runtime repo"
+                exit 1
+            fi
+            LOCAL_RUNTIME_PATH="$2"
+            shift 2
+            ;;
+        --local-runtime-config)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --local-runtime-config requires a value (Release, Debug)"
+                exit 1
+            fi
+            LOCAL_RUNTIME_CONFIG="$2"
+            shift 2
             ;;
         *)
             POSITIONAL_ARGS+=("$1")
@@ -35,8 +53,10 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
 fi
 
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: $0 [--platform <android|ios>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "Usage: $0 [--platform <android|ios>] [--local-runtime <path>] [--local-runtime-config <Release|Debug>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
     echo "  --platform: target platform (default: android)"
+    echo "  --local-runtime: path to local dotnet/runtime repo with built shipping packages"
+    echo "  --local-runtime-config: runtime build configuration (default: Release)"
     echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     exit 1
 fi
@@ -69,6 +89,13 @@ fi
 
 MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
 
+# Configure local runtime if requested
+if [ -n "$LOCAL_RUNTIME_PATH" ]; then
+    configure_local_runtime "$LOCAL_RUNTIME_PATH" "$PLATFORM_RID" "$LOCAL_RUNTIME_CONFIG" || exit 1
+    generate_local_nuget_config "$APP_DIR" || exit 1
+    generate_local_build_props "$APP_DIR" || exit 1
+fi
+
 if [[ -z "$4" || ! "$4" =~ ^[0-9]+$ ]]; then
     echo "Invalid fourth parameter. Please provide a positive integer indicating how many times the build will be repeated."
     exit 1
@@ -86,6 +113,13 @@ for ((i=1; i<=REPEAT_COUNT; i++)); do
     echo "Build iteration $i of $REPEAT_COUNT"
     rm -rf "${APP_DIR:?}/bin"
     rm -rf "${APP_DIR:?}/obj"
+
+    # Clear NuGet cache when using local runtime to ensure fresh packages
+    if [ "$LOCAL_RUNTIME_ACTIVE" = true ]; then
+        echo "Clearing NuGet package cache ($LOCAL_PACKAGES)..."
+        rm -rf "${LOCAL_PACKAGES:?}"
+        mkdir -p "$LOCAL_PACKAGES"
+    fi
 
     timestamp=$(date +"%Y%m%d%H%M%S")
     logfile="$APP_DIR/msbuild_$timestamp.binlog"

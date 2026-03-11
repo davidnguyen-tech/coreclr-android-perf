@@ -10,6 +10,7 @@ PLATFORM="$(read_prepared_platform)"
 ITERATIONS=10
 EXTRA_ARGS=()
 SELECTED_APPS=()
+LOCAL_RUNTIME_ARGS=()
 
 print_usage() {
     echo "Usage: $0 [options]"
@@ -20,6 +21,8 @@ print_usage() {
     echo "  --platform <name>          Target platform: android, ios (default: from prepare.sh)"
     echo "  --app <name>               Measure only this app (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
+    echo "  --local-runtime <path>     Path to local dotnet/runtime repo with built shipping packages"
+    echo "  --local-runtime-config <c> Runtime build configuration: Release, Debug (default: Release)"
     echo "  --help                     Show this help message"
     echo ""
     echo "Examples:"
@@ -54,6 +57,22 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ITERATIONS="$2"
+            shift 2
+            ;;
+        --local-runtime)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --local-runtime requires a path to the runtime repo"
+                exit 1
+            fi
+            LOCAL_RUNTIME_ARGS+=("--local-runtime" "$2")
+            shift 2
+            ;;
+        --local-runtime-config)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --local-runtime-config requires a value (Release, Debug)"
+                exit 1
+            fi
+            LOCAL_RUNTIME_ARGS+=("--local-runtime-config" "$2")
             shift 2
             ;;
         --help)
@@ -128,7 +147,7 @@ for i in "${!CONFIGS[@]}"; do
     echo "----------------------------------------------"
 
     OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-        --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+        --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${LOCAL_RUNTIME_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -eq 0 ]; then

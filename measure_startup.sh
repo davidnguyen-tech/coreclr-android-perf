@@ -26,6 +26,8 @@ print_usage() {
     echo ""
     echo "Options:"
     echo "  --platform <android|ios>      Target platform (default: from prepare.sh)"
+    echo "  --local-runtime <path>        Path to local dotnet/runtime repo with built shipping packages"
+    echo "  --local-runtime-config <cfg>  Runtime build configuration: Release, Debug (default: Release)"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -42,8 +44,10 @@ SAMPLE_APP=$1
 BUILD_CONFIG=$2
 shift 2
 
-# Parse options to extract --platform before passing remaining args to test.py
+# Parse options to extract --platform and --local-runtime before passing remaining args to test.py
 PLATFORM="$(read_prepared_platform)"
+LOCAL_RUNTIME_PATH=""
+LOCAL_RUNTIME_CONFIG="Release"
 PASSTHROUGH_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -53,6 +57,22 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             PLATFORM="$2"
+            shift 2
+            ;;
+        --local-runtime)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --local-runtime requires a path to the runtime repo"
+                exit 1
+            fi
+            LOCAL_RUNTIME_PATH="$2"
+            shift 2
+            ;;
+        --local-runtime-config)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --local-runtime-config requires a value (Release, Debug)"
+                exit 1
+            fi
+            LOCAL_RUNTIME_CONFIG="$2"
             shift 2
             ;;
         *)
@@ -82,6 +102,13 @@ fi
 # Build config determines all MSBuild properties (including UseMonoRuntime)
 MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
 
+# Configure local runtime if requested
+if [ -n "$LOCAL_RUNTIME_PATH" ]; then
+    configure_local_runtime "$LOCAL_RUNTIME_PATH" "$PLATFORM_RID" "$LOCAL_RUNTIME_CONFIG" || exit 1
+    generate_local_nuget_config "$APP_DIR" || exit 1
+    generate_local_build_props "$APP_DIR" || exit 1
+fi
+
 # Determine package name from the csproj
 PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$APP_DIR/$SAMPLE_APP.csproj" | sed 's/<ApplicationId>//')
 if [ -z "$PACKAGE_NAME" ]; then
@@ -93,6 +120,13 @@ echo "=== Building $SAMPLE_APP ($BUILD_CONFIG) ==="
 
 # Clean previous build artifacts to avoid stale state between configs
 rm -rf "${APP_DIR:?}/bin" "${APP_DIR:?}/obj"
+
+# Clear NuGet cache when using local runtime to ensure fresh packages
+if [ "$LOCAL_RUNTIME_ACTIVE" = true ]; then
+    echo "Clearing NuGet package cache ($LOCAL_PACKAGES)..."
+    rm -rf "${LOCAL_PACKAGES:?}"
+    mkdir -p "$LOCAL_PACKAGES"
+fi
 
 # Build the package
 ${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \

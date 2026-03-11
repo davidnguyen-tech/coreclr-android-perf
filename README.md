@@ -176,7 +176,7 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 ### Building / Running Sample Apps Manually
 
 ```bash
-./build.sh <app> <build-config> <build|run> <ntimes> [additional_args]
+./build.sh [--local-runtime <path>] <app> <build-config> <build|run> <ntimes> [additional_args]
 ```
 
 **Examples:**
@@ -187,6 +187,9 @@ The trace directory also contains the build binlog and a `logcat.txt` dump for d
 
 # Run dotnet new maui with R2R + marshal methods
 ./build.sh dotnet-new-maui R2R run 1 "-p:AndroidEnableMarshalMethods=true"
+
+# Build with a custom local runtime (see "Using a Custom Local Runtime" below)
+./build.sh --local-runtime ~/repos/runtime dotnet-new-ios CORECLR_JIT build 1
 ```
 
 Build artifacts are copied to `./build/` for further inspection (APKs, binlogs).
@@ -198,6 +201,54 @@ Build artifacts are copied to `./build/` for further inspection (APKs, binlogs).
 ```
 
 Scans the `./build/` directory for signed APKs and prints their sizes. Pass `-unzipped` to unpack and show extracted sizes.
+
+## Using a Custom Local Runtime
+
+You can measure against a custom build of [dotnet/runtime](https://github.com/dotnet/runtime) instead of the NuGet-published packages. This is useful for testing performance changes before merging.
+
+### Prerequisites
+
+Build the shipping packages in your local runtime repo:
+
+```bash
+cd /path/to/runtime
+./build.sh -s clr+libs+packs+host -c Release
+```
+
+This produces NuGet packages in `artifacts/packages/Release/Shipping/`.
+
+### Usage
+
+Pass `--local-runtime <path>` to any build or measurement script:
+
+```bash
+# Single build
+./build.sh --local-runtime ~/repos/runtime dotnet-new-ios CORECLR_JIT build 1
+
+# Single measurement
+./measure_startup.sh dotnet-new-ios CORECLR_JIT --platform ios --local-runtime ~/repos/runtime
+
+# All measurements
+./measure_all.sh --platform ios --local-runtime ~/repos/runtime
+
+# With a Debug runtime build
+./build.sh --local-runtime ~/repos/runtime --local-runtime-config Debug dotnet-new-ios CORECLR_JIT build 1
+```
+
+### How It Works
+
+Based on the [dotnet/runtime shipping packages guide](https://github.com/dotnet/runtime/blob/main/docs/workflow/testing/using-dev-shipping-packages.md):
+
+1. A per-app `NuGet.config` is generated in the app directory with the local shipping path as a package source (alongside the existing feeds)
+2. `Directory.Build.props` pins `RuntimeFrameworkVersion` to the local version (auto-detected from package filenames, typically `11.0.0-dev`)
+3. The NuGet package cache (`packages/`) is cleared before each build to ensure the latest local packages are used
+
+### Iterating on Changes
+
+After making changes to the runtime and rebuilding:
+
+1. Rebuild the runtime: `./build.sh -s clr+libs+packs+host` (or just the subset you changed)
+2. Re-run the measurement — the NuGet cache is automatically cleared before each build
 
 ## Runtime Configurations
 
