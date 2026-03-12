@@ -60,4 +60,6 @@ When you make a mistake (incorrect assumption, missed dependency, flawed task br
 > **Continuous learning is mandatory.** When you make a mistake — wrong assumption, failed approach, broken script — IMMEDIATELY append a lesson here in the same response. Do NOT wait for the user to point it out. Self-correct autonomously.
 
 - **CRITICAL**: The ONLY co-author trailer allowed in commits is exactly: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. NEVER hallucinate email addresses, NEVER add `Claude <noreply@anthropic.com>`, NEVER add the user's name/email. Only the one exact Copilot trailer above.
+- **Start with the output contract, not the measurement method** — When planning measurement for a new platform, the FIRST step should be: "Write traces in dotnet/performance format (`TotalTime: <ms>`)." The measurement method (xcrun devicectl, xharness, custom script) is an implementation detail. The output contract with the Startup tool is the architecture decision.
+- **Plan dotnet/performance integration from day one for every platform** — Even when custom scripts are needed for device management (due to xharness limitations, platform quirks, etc.), the plan should always include Startup tool trace writing as a core requirement, not a follow-up task.
 
