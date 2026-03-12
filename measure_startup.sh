@@ -232,6 +232,11 @@ if [ -f "$TRACE_SRC" ]; then
     cp "$TRACE_SRC" "$RUN_RESULTS_DIR/${RESULT_NAME}.trace"
 fi
 
+# Save package size metadata
+if [ -n "$PACKAGE_SIZE_BYTES" ]; then
+    echo "${PACKAGE_SIZE_BYTES}" > "$RUN_RESULTS_DIR/${RESULT_NAME}.size"
+fi
+
 cd "$SCRIPT_DIR" || exit 1
 
 if [ $RESULT -ne 0 ]; then
