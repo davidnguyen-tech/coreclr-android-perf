@@ -135,8 +135,14 @@ echo " Iterations per config: $ITERATIONS"
 echo "=============================================="
 echo ""
 
-mkdir -p "$RESULTS_DIR"
-SUMMARY_FILE="$RESULTS_DIR/summary.csv"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOCAL_RUNTIME_SUFFIX=""
+if [ ${#LOCAL_RUNTIME_ARGS[@]} -gt 0 ]; then
+    LOCAL_RUNTIME_SUFFIX="_local-runtime"
+fi
+RUN_DIR="$RESULTS_DIR/${TIMESTAMP}_${PLATFORM}_iter${ITERATIONS}${LOCAL_RUNTIME_SUFFIX}"
+mkdir -p "$RUN_DIR"
+SUMMARY_FILE="$RUN_DIR/summary.csv"
 echo "app,config,avg_ms,min_ms,max_ms,pkg_size_mb,pkg_size_bytes,iterations" > "$SUMMARY_FILE"
 
 for i in "${!CONFIGS[@]}"; do
@@ -147,7 +153,7 @@ for i in "${!CONFIGS[@]}"; do
     echo "----------------------------------------------"
 
     OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-        --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${LOCAL_RUNTIME_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
+        --platform "$PLATFORM" --startup-iterations "$ITERATIONS" --results-dir "$RUN_DIR" "${LOCAL_RUNTIME_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     EXIT_CODE=$?
 
     if [ $EXIT_CODE -eq 0 ]; then
@@ -193,7 +199,7 @@ if [ $FAILED -gt 0 ]; then
     done
 fi
 echo ""
-echo " Results: $SUMMARY_FILE"
+echo " Results: $RUN_DIR/"
 echo ""
 
 # Print the summary table

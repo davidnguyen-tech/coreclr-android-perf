@@ -33,6 +33,7 @@ print_usage() {
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
     echo "  --trace-perfetto              Capture a perfetto trace after measurements"
     echo "  --startup-iterations N        Number of startup iterations (default: 10)"
+    echo "  --results-dir <path>          Save results to this directory (default: auto-generated timestamped dir)"
     exit 1
 }
 
@@ -48,6 +49,8 @@ shift 2
 PLATFORM="$(read_prepared_platform)"
 LOCAL_RUNTIME_PATH=""
 LOCAL_RUNTIME_CONFIG="Release"
+CUSTOM_RESULTS_DIR=""
+STARTUP_ITERATIONS=10
 PASSTHROUGH_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -73,6 +76,23 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             LOCAL_RUNTIME_CONFIG="$2"
+            shift 2
+            ;;
+        --results-dir)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --results-dir requires a path"
+                exit 1
+            fi
+            CUSTOM_RESULTS_DIR="$2"
+            shift 2
+            ;;
+        --startup-iterations)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --startup-iterations requires a numeric value"
+                exit 1
+            fi
+            STARTUP_ITERATIONS="$2"
+            PASSTHROUGH_ARGS+=("$1" "$2")
             shift 2
             ;;
         *)
@@ -107,6 +127,19 @@ if [ -n "$LOCAL_RUNTIME_PATH" ]; then
     configure_local_runtime "$LOCAL_RUNTIME_PATH" "$PLATFORM_RID" "$LOCAL_RUNTIME_CONFIG" || exit 1
     generate_local_nuget_config "$APP_DIR" || exit 1
     generate_local_build_props "$APP_DIR" || exit 1
+fi
+
+# Generate timestamped results directory
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RESULT_NAME="${SAMPLE_APP}_${BUILD_CONFIG}"
+LOCAL_RUNTIME_SUFFIX=""
+if [ "$LOCAL_RUNTIME_ACTIVE" = true ]; then
+    LOCAL_RUNTIME_SUFFIX="_local-runtime"
+fi
+if [ -n "$CUSTOM_RESULTS_DIR" ]; then
+    RUN_RESULTS_DIR="$CUSTOM_RESULTS_DIR"
+else
+    RUN_RESULTS_DIR="$RESULTS_DIR/${TIMESTAMP}_${RESULT_NAME}_iter${STARTUP_ITERATIONS}${LOCAL_RUNTIME_SUFFIX}"
 fi
 
 # Determine package name from the csproj
@@ -182,8 +215,7 @@ fi
 cd "$PLATFORM_SCENARIO_DIR" || { echo "Error: dotnet/performance scenario directory not found. Run ./prepare.sh first."; exit 1; }
 
 # Create results directory
-RESULT_NAME="${SAMPLE_APP}_${BUILD_CONFIG}"
-mkdir -p "$RESULTS_DIR"
+mkdir -p "$RUN_RESULTS_DIR"
 
 python3 test.py devicestartup \
     --device-type "$PLATFORM_DEVICE_TYPE" \
@@ -194,9 +226,10 @@ python3 test.py devicestartup \
 RESULT=$?
 
 # Save the raw trace and any generated reports
+RESULT_NAME="${SAMPLE_APP}_${BUILD_CONFIG}"
 TRACE_SRC="traces/PerfTest/runoutput.trace"
 if [ -f "$TRACE_SRC" ]; then
-    cp "$TRACE_SRC" "$RESULTS_DIR/${RESULT_NAME}.trace"
+    cp "$TRACE_SRC" "$RUN_RESULTS_DIR/${RESULT_NAME}.trace"
 fi
 
 cd "$SCRIPT_DIR" || exit 1
@@ -209,6 +242,6 @@ fi
 echo ""
 echo "=== Measurement complete ==="
 echo "$PLATFORM_PACKAGE_LABEL size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
-if [ -f "$RESULTS_DIR/${RESULT_NAME}.trace" ]; then
-    echo "Results saved to: results/${RESULT_NAME}.trace"
+if [ -f "$RUN_RESULTS_DIR/${RESULT_NAME}.trace" ]; then
+    echo "Results saved to: $RUN_RESULTS_DIR/"
 fi
