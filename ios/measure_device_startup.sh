@@ -587,7 +587,7 @@ SCENARIO_LABEL="${SAMPLE_APP}_${BUILD_CONFIG}_device"
 
 if [ -f "$TRACE_FILE" ] && [ -s "$TRACE_FILE" ]; then
     echo "--- Running Startup tool (DeviceTimeToMain parser) ---"
-    STARTUP_TOOL_OUTPUT=$(${LOCAL_DOTNET} run -tl:off -v:q --project "$STARTUP_TOOL_PROJECT" \
+    STARTUP_TOOL_OUTPUT=$(${LOCAL_DOTNET} run -v:q --project "$STARTUP_TOOL_PROJECT" \
         -p:NuGetAudit=false -- \
         --app-exe "$APP_BUNDLE" \
         --metric-type DeviceTimeToMain \
