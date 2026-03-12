@@ -532,7 +532,8 @@ for ((i = 0; i <= ITERATIONS; i++)); do
 
     TIMES+=("$TOTAL_MS")
     # Append to trace file for Startup tool (DeviceTimeToMain parser expects "TotalTime: <ms>")
-    echo "TotalTime: ${TOTAL_MS}" >> "$TRACE_FILE"
+    # Use printf %.0f to round to integer — avoids locale-sensitive decimal parsing in C# double.Parse()
+    printf "TotalTime: %.0f\n" "$TOTAL_MS" >> "$TRACE_FILE"
     echo "  [$i/$ITERATIONS] ${TOTAL_MS} ms (main: ${TIME_TO_MAIN}, draw: ${TIME_TO_DRAW})"
 
     # Cleanup logarchive
