@@ -373,6 +373,17 @@ echo ""
 echo "=== Measuring startup ($ITERATIONS iterations + 1 warmup) ==="
 echo ""
 
+# ---------------------------------------------------------------------------
+# Prepare trace directory for Startup tool integration
+# ---------------------------------------------------------------------------
+# The dotnet/performance Startup tool's DeviceTimeToMain parser reads trace files
+# containing lines like "TotalTime: 241". We write one such file here and invoke
+# the Startup tool after all iterations complete for standardised statistics.
+TRACE_DIR="$RESULTS_DIR/traces/PerfTest"
+TRACE_FILE="$TRACE_DIR/runoutput.trace"
+mkdir -p "$TRACE_DIR"
+rm -f "$TRACE_FILE"
+
 TIMES=()
 FAILED_COUNT=0
 
@@ -520,6 +531,9 @@ for ((i = 0; i <= ITERATIONS; i++)); do
     fi
 
     TIMES+=("$TOTAL_MS")
+    # Append to trace file for Startup tool (DeviceTimeToMain parser expects "TotalTime: <ms>")
+    # Use printf %.0f to round to integer — avoids locale-sensitive decimal parsing in C# double.Parse()
+    printf "TotalTime: %.0f\n" "$TOTAL_MS" >> "$TRACE_FILE"
     echo "  [$i/$ITERATIONS] ${TOTAL_MS} ms (main: ${TIME_TO_MAIN}, draw: ${TIME_TO_DRAW})"
 
     # Cleanup logarchive
@@ -560,8 +574,47 @@ echo "  Max:    ${MAX} ms"
 echo "  StdDev: ${STDEV} ms"
 echo ""
 
-# Output parseable summary line compatible with measure_all.sh parsing
-print_measurement_summary "$AVG" "$MIN" "$MAX" "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES"
+# ---------------------------------------------------------------------------
+# Invoke dotnet/performance Startup tool for standardised output
+# ---------------------------------------------------------------------------
+# The Startup tool's DeviceTimeToMain parser reads the trace file we wrote above
+# and produces a formatted results table (Generic Startup | avg | min | max).
+# If the tool fails (build error, missing deps), fall back to custom statistics.
+STARTUP_TOOL_OUTPUT=""
+STARTUP_TOOL_OK=false
+
+STARTUP_TOOL_PROJECT="$PERF_DIR/src/tools/ScenarioMeasurement/Startup"
+SCENARIO_LABEL="${SAMPLE_APP}_${BUILD_CONFIG}_device"
+
+if [ -f "$TRACE_FILE" ] && [ -s "$TRACE_FILE" ]; then
+    echo "--- Running Startup tool (DeviceTimeToMain parser) ---"
+    STARTUP_TOOL_OUTPUT=$(${LOCAL_DOTNET} run -v:q --project "$STARTUP_TOOL_PROJECT" \
+        -p:NuGetAudit=false -- \
+        --app-exe "$APP_BUNDLE" \
+        --metric-type DeviceTimeToMain \
+        --scenario-name "$SCENARIO_LABEL" \
+        --trace-name runoutput.trace \
+        --trace-directory "$TRACE_DIR" \
+        --parse-only 2>&1) && STARTUP_TOOL_OK=true
+
+    if [ "$STARTUP_TOOL_OK" = true ]; then
+        echo "$STARTUP_TOOL_OUTPUT"
+    else
+        echo "WARNING: Startup tool failed, using custom statistics"
+        echo "  (exit code / output): $(echo "$STARTUP_TOOL_OUTPUT" | tail -3)"
+    fi
+    echo ""
+fi
+
+# Output parseable summary line compatible with measure_all.sh parsing.
+# If the Startup tool succeeded its output already contains the "Generic Startup"
+# line that measure_all.sh parses; emit the custom fallback only when needed.
+if [ "$STARTUP_TOOL_OK" = false ]; then
+    print_measurement_summary "$AVG" "$MIN" "$MAX" "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES"
+else
+    # Always emit the APP size line — the Startup tool doesn't produce it
+    echo "APP size: ${PACKAGE_SIZE_MB} MB ($PACKAGE_SIZE_BYTES bytes)"
+fi
 
 # ---------------------------------------------------------------------------
 # Save detailed results to CSV
