@@ -167,10 +167,10 @@ generate_local_build_props() {
   <Import Project="\$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '\$(MSBuildThisFileDirectory)../'))" />
 
   <!-- Pin runtime framework version to the local build -->
-  <PropertyGroup>
+  <PropertyGroup Condition="'\$(_UseLocalRuntime)' == 'true'">
 $crossgen2_prop
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'\$(_UseLocalRuntime)' == 'true'">
     <KnownFrameworkReference Update="Microsoft.NETCore.App"
                              DefaultRuntimeFrameworkVersion="$LOCAL_RUNTIME_VERSION"
                              LatestRuntimeFrameworkVersion="$LOCAL_RUNTIME_VERSION"

@@ -127,6 +127,7 @@ if [ -n "$LOCAL_RUNTIME_PATH" ]; then
     configure_local_runtime "$LOCAL_RUNTIME_PATH" "$PLATFORM_RID" "$LOCAL_RUNTIME_CONFIG" || exit 1
     generate_local_nuget_config "$APP_DIR" || exit 1
     generate_local_build_props "$APP_DIR" || exit 1
+    MSBUILD_ARGS="$MSBUILD_ARGS -p:_UseLocalRuntime=true"
 fi
 
 # Generate timestamped results directory
