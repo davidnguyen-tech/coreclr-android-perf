@@ -62,10 +62,14 @@ if [[ -z "$1" || -z "$2" ]]; then
 fi
 
 VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
-if [[ ! " $VALID_CONFIGS " =~ " $2 " ]]; then
-    echo "Invalid build config '$2'. Allowed values are: $VALID_CONFIGS"
-    exit 1
+if [ "$PLATFORM" == "ios" ]; then
+    # Non-composite R2R is not supported on iOS (MachO only supports composite R2R images)
+    VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R_COMP R2R_COMP_PGO"
 fi
+case " $VALID_CONFIGS " in
+    *" $2 "*) ;;
+    *) echo "Invalid build config '$2' for $PLATFORM. Allowed values are: $VALID_CONFIGS"; exit 1 ;;
+esac
 
 if [[ -z "$3" || ( "$3" != "run" && "$3" != "build" ) ]]; then
     echo "Invalid third parameter. Allowed values are: run, build"
@@ -80,6 +84,13 @@ fi
 
 SAMPLE_APP=$1
 BUILD_CONFIG=$2
+
+# Reject app names with path separators to prevent directory traversal
+if [[ "$SAMPLE_APP" == */* || "$SAMPLE_APP" == *..* ]]; then
+    echo "Error: App name must not contain '/' or '..'"
+    exit 1
+fi
+
 APP_DIR="$APPS_DIR/$SAMPLE_APP"
 
 if [ ! -d "$APP_DIR" ]; then

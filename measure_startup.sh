@@ -106,10 +106,20 @@ set -- "${PASSTHROUGH_ARGS[@]}"
 # Resolve platform-specific configuration
 resolve_platform_config "$PLATFORM" || exit 1
 
-# Validate build config
-VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
-if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
-    echo "Invalid build config '$BUILD_CONFIG'. Allowed values are: $VALID_CONFIGS"
+# Platform-aware config validation (non-composite R2R not supported on iOS)
+if [ "$PLATFORM" == "ios" ]; then
+    VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R_COMP R2R_COMP_PGO"
+else
+    VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R R2R_COMP R2R_COMP_PGO"
+fi
+case " $VALID_CONFIGS " in
+    *" $BUILD_CONFIG "*) ;;
+    *) echo "Invalid build config '$BUILD_CONFIG' for $PLATFORM. Allowed values are: $VALID_CONFIGS"; exit 1 ;;
+esac
+
+# Reject app names with path separators to prevent directory traversal
+if [[ "$SAMPLE_APP" == */* || "$SAMPLE_APP" == *..* ]]; then
+    echo "Error: App name must not contain '/' or '..'"
     exit 1
 fi
 
