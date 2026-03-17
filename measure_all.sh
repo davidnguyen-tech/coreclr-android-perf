@@ -10,6 +10,7 @@ PLATFORM="$(read_prepared_platform)"
 ITERATIONS=10
 EXTRA_ARGS=()
 SELECTED_APPS=()
+SELECTED_CONFIGS=()
 LOCAL_RUNTIME_ARGS=()
 
 print_usage() {
@@ -20,6 +21,7 @@ print_usage() {
     echo "Options:"
     echo "  --platform <name>          Target platform: android, ios (default: from prepare.sh)"
     echo "  --app <name>               Measure only this app (can be repeated)"
+    echo "  --config <name>            Measure only this config (can be repeated)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
     echo "  --local-runtime <path>     Path to local dotnet/runtime repo with built shipping packages"
     echo "  --local-runtime-config <c> Runtime build configuration: Release, Debug (default: Release)"
@@ -29,7 +31,8 @@ print_usage() {
     echo "  $0                                          # All apps, all configs, 10 iterations"
     echo "  $0 --platform ios                           # iOS platform, all configs"
     echo "  $0 --startup-iterations 3                   # All apps, all configs, 3 iterations"
-    echo "  $0 --app dotnet-new-android                 # Only Android app, all configs"
+    echo "  $0 --app dotnet-new-maui --config R2R_COMP  # Single app + config"
+    echo "  $0 --app dotnet-new-maui --app dotnet-new-maui-samplecontent --config R2R_COMP --config CORECLR_JIT"
     exit 0
 }
 
@@ -49,6 +52,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             SELECTED_APPS+=("$2")
+            shift 2
+            ;;
+        --config)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --config requires a value"
+                exit 1
+            fi
+            SELECTED_CONFIGS+=("$2")
             shift 2
             ;;
         --startup-iterations)
@@ -110,10 +121,29 @@ if [ ${#SELECTED_APPS[@]} -eq 0 ]; then
     SELECTED_APPS=("${APPS[@]}")
 fi
 
+# Default to all configs if none selected; validate selected configs
+if [ ${#SELECTED_CONFIGS[@]} -eq 0 ]; then
+    SELECTED_CONFIGS=("${ALL_CONFIGS[@]}")
+else
+    for cfg in "${SELECTED_CONFIGS[@]}"; do
+        local_valid=false
+        for valid_cfg in "${ALL_CONFIGS[@]}"; do
+            if [ "$cfg" == "$valid_cfg" ]; then
+                local_valid=true
+                break
+            fi
+        done
+        if [ "$local_valid" != true ]; then
+            echo "Invalid config '$cfg' for $PLATFORM. Allowed values are: ${ALL_CONFIGS[*]}"
+            exit 1
+        fi
+    done
+fi
+
 # Build the list of (app, config) pairs
 CONFIGS=()
 for app in "${SELECTED_APPS[@]}"; do
-    for config in "${ALL_CONFIGS[@]}"; do
+    for config in "${SELECTED_CONFIGS[@]}"; do
         CONFIGS+=("$app|$config")
     done
 done
