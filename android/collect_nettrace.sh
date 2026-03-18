@@ -195,11 +195,11 @@ mkdir -p "$TRACE_DIR"
 # ---------------------------------------------------------------------------
 # Build MSBuild arguments
 # ---------------------------------------------------------------------------
-if [ "$PLATFORM" = "android" ]; then
-    DIAG_ADDRESS="127.0.0.1"
-else
-    DIAG_ADDRESS="10.0.2.2"
-fi
+# Keep the app-side diagnostic endpoint on loopback for both transport models.
+# Physical devices reach host dsrouter via adb reverse; android-emulator keeps
+# the same 127.0.0.1 endpoint and lets dsrouter's Android forwarding bridge
+# carry the connection.
+DIAG_ADDRESS="127.0.0.1"
 
 MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG -p:DiagnosticAddress=$DIAG_ADDRESS -p:DiagnosticPort=9000 -p:DiagnosticSuspend=true -p:DiagnosticListenMode=connect"
 
@@ -274,7 +274,9 @@ if lsof -i :9000 >/dev/null 2>&1; then
     fi
 fi
 
-# For physical devices, set up adb reverse so device:9000 reaches host:9000
+# For physical devices, use adb reverse so device loopback reaches host
+# loopback. android-emulator keeps the same loopback address, but dsrouter owns
+# the Android forwarding bridge when it starts below.
 if [ "$PLATFORM" = "android" ]; then
     echo "Setting up adb reverse tcp:9000 tcp:9000 for physical device..."
     adb reverse tcp:9000 tcp:9000
@@ -346,7 +348,8 @@ fi
 # ---------------------------------------------------------------------------
 # dsrouter is started AFTER the build to avoid amfid killing it during long
 # R2R builds. The app needs dsrouter running when it starts to connect for
-# diagnostic tracing.
+# diagnostic tracing. android-emulator keeps the same loopback endpoint and
+# lets dsrouter establish the Android forwarding bridge here.
 echo ""
 echo "--- Starting dotnet-dsrouter ---"
 DSROUTER_ARGS="server-server -ipcs $IPC_NAME -tcps 127.0.0.1:9000"

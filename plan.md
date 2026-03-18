@@ -123,6 +123,7 @@ Every script that validates `--platform` needs to accept `android-emulator`. Thi
   - Parse `--platform` from args, call `resolve_platform_config "$PLATFORM"`
   - Replace hardcoded `-f net11.0-android -r android-arm64` with `-f "$PLATFORM_TFM" -r "$PLATFORM_RID"`
 - [x] **2.3.2** Verify adb commands in the script work with emulators (they should — adb is transport-transparent)
+- [x] **2.3.3** Keep `android-emulator` nettrace diagnostics on `127.0.0.1` and rely on dsrouter's Android forwarding bridge, while leaving the physical-device `adb reverse` path unchanged.
 
 **Files:** `android/collect_nettrace.sh`
 **Acceptance criteria:** `android/collect_nettrace.sh app config --platform android-emulator` builds with correct RID for host architecture.

@@ -95,3 +95,4 @@ When you make a mistake (missed a real bug, flagged a false positive, incorrect 
 - The 5-model review posts to a single PR comment as a table, not separate comments per model.
 - **CRITICAL**: The ONLY co-author trailer allowed in commits is exactly: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. NEVER hallucinate email addresses, NEVER add `Claude <noreply@anthropic.com>`, NEVER add the user's name/email. Only the one exact Copilot trailer above.
 
+- Before flagging platform-specific diagnostics code, verify MSBuild property-function syntax against real MSBuild rules and trace the full Android transport path end-to-end; emulator/device address choices only make sense once the forwarding vs. reverse bridge is mapped completely.
