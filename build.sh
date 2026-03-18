@@ -35,9 +35,10 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
 fi
 
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: $0 [--platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "Usage: $0 [--platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>] <app-name> <build-config> <build|run> <ntimes> [--pgo-mibc-dir <path>] [additional_args]"
     echo "  --platform: target platform (android, android-emulator, ios, ios-simulator, osx, maccatalyst) (default: android)"
     echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
+    echo "  --pgo-mibc-dir: directory containing *.mibc files for R2R_COMP_PGO builds"
     exit 1
 fi
 
@@ -77,7 +78,23 @@ fi
 REPEAT_COUNT=$4
 
 if [[ -n "$5" ]]; then
-    MSBUILD_ARGS="$MSBUILD_ARGS $5"
+    if [[ "$5" == "--pgo-mibc-dir" ]]; then
+        if [[ -z "$6" ]]; then
+            echo "Error: --pgo-mibc-dir requires a directory path"
+            exit 1
+        fi
+        if [ ! -d "$6" ]; then
+            echo "Error: PGO MIBC directory does not exist: $6"
+            exit 1
+        fi
+        MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$6"
+        # Process remaining args after --pgo-mibc-dir
+        if [[ -n "$7" ]]; then
+            MSBUILD_ARGS="$MSBUILD_ARGS $7"
+        fi
+    else
+        MSBUILD_ARGS="$MSBUILD_ARGS $5"
+    fi
 fi
 
 echo "Building $SAMPLE_APP with config $BUILD_CONFIG $REPEAT_COUNT times"

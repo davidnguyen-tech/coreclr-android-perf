@@ -66,6 +66,7 @@ print_usage() {
     echo "  --force                  Accepted for backwards compatibility; now a no-op"
     echo "                           (each run writes a unique timestamped file)"
     echo "  --pgo-instrumentation    Include PGO instrumentation env vars for higher-quality traces"
+    echo "  --pgo-mibc-dir <path>    Directory containing *.mibc files for R2R_COMP_PGO builds"
     echo ""
     echo "Output: traces/<app>_<config>/android-startup-<YYYYMMDD-HHMMSS>.nettrace"
     exit 1
@@ -85,6 +86,7 @@ shift 2
 PLATFORM="android"
 DURATION=60
 PGO_INSTRUMENTATION=false
+PGO_MIBC_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -116,6 +118,14 @@ while [[ $# -gt 0 ]]; do
         --pgo-instrumentation)
             PGO_INSTRUMENTATION=true
             shift
+            ;;
+        --pgo-mibc-dir)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --pgo-mibc-dir requires a directory path"
+                exit 1
+            fi
+            PGO_MIBC_DIR="$2"
+            shift 2
             ;;
         *)
             echo "Unknown option: $1"
@@ -200,6 +210,14 @@ MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG -p:DiagnosticAddress=$DIAG_ADDRESS -
 
 if [ "$PGO_INSTRUMENTATION" = true ]; then
     MSBUILD_ARGS="$MSBUILD_ARGS -p:CollectNetTrace=true"
+fi
+
+if [ -n "$PGO_MIBC_DIR" ]; then
+    if [ ! -d "$PGO_MIBC_DIR" ]; then
+        echo "Error: PGO MIBC directory does not exist: $PGO_MIBC_DIR"
+        exit 1
+    fi
+    MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$PGO_MIBC_DIR"
 fi
 
 # Determine package name
