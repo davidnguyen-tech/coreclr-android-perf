@@ -563,7 +563,7 @@ echo "--- Collecting .nettrace (${DURATION}s) ---"
 
 # Event providers matching dotnet-optimization's configuration:
 # Microsoft-Windows-DotNETRuntime with JIT, Loader, GC, Exception, ThreadPool, Interop events
-PROVIDERS="Microsoft-Windows-DotNETRuntime:0x1F000080018:5,Microsoft-Windows-DotNETRuntime:0x4c14fccbd:5,Microsoft-Windows-DotNETRuntimePrivate:0x4002000b:5"
+PROVIDERS="Microsoft-Windows-DotNETRuntime:0x5F000080018:5,Microsoft-Windows-DotNETRuntime:0x4c14fccbd:5,Microsoft-Windows-DotNETRuntimePrivate:0x4002000b:5"
 
 if [ "$PLATFORM" = "ios" ]; then
     DIAG_PORT_ARG="$IPC_NAME,connect"
