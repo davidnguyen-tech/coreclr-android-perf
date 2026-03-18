@@ -17,4 +17,26 @@
     </PropertyGroup>
     <Message Importance="High" Text="Resetting the value of AndroidStripILAfterAOT to original value: '$(_AndroidStripILAfterAOTBackup)'"/>
   </Target>
+
+  <!--
+    External PGO MIBC directory support.
+
+    Pass -p:PgoMibcDir=<path> on the command line to inject additional *.mibc
+    files into the R2R composite PGO build without modifying the app project.
+
+    Example:
+      dotnet build -p:_BuildConfig=R2R_COMP_PGO \
+          -p:PgoMibcDir=/path/to/mibc/android-x64-ci-20260316.2 ...
+
+    Files in PgoMibcDir are added alongside any *.mibc files already listed in
+    the app project's profiles/ directory.  The property is Android-scoped and
+    only takes effect when PublishReadyToRunComposite + PGO are both enabled.
+  -->
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'
+                        And '$(PublishReadyToRun)' == 'true'
+                        And '$(PublishReadyToRunComposite)' == 'true'
+                        And '$(PGO)' == 'true'
+                        And '$(PgoMibcDir)' != ''">
+    <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
+  </ItemGroup>
 </Project>
