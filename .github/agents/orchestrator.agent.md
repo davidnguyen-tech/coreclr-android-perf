@@ -48,7 +48,7 @@ Use the `task` tool with `agent_type: "researcher"` to investigate the codebase.
 ### Stage 2: Plan
 Use the `task` tool with `agent_type: "planner"` to create a structured implementation plan.
 - Pass the original task AND all research findings from Stage 1 to the planner
-- The planner will save an ordered plan to `plan.md`, broken into discrete steps/sub-steps
+- The planner will save an ordered plan to a scoped file under `.github/plans/` (for example, `.github/plans/<task>-plan.md`), broken into discrete steps/sub-steps
 - Each step should be implementable as its own PR
 - Track each step as a SQL todo for progress monitoring
 
@@ -93,9 +93,9 @@ Use the `task` tool with `agent_type: "reviewer"` to review the PR.
 Your context window is finite. Prevent overflow with these rules:
 
 - **Instruct sub-agents to return concise summaries** — e.g., "Return only: files changed, PR number, and any issues." Do NOT ask for full diffs or build logs in the result.
-- **Use `plan.md` and SQL todos as persistent state** — never rely on conversation memory for what's done. Query `SELECT * FROM todos` to know current status.
+- **Use the scoped plan file in `.github/plans/` plus SQL todos as persistent state** — never rely on conversation memory for what's done. The planner's output file is the canonical step list; SQL tracks execution status. Query `SELECT * FROM todos` to know current status.
 - **Discard sub-agent verbose output** — after confirming a sub-agent succeeded, do not repeat its output. Summarize in one line and move on.
-- **Between steps, forget previous step details.** Only carry forward: the PR number/branch that merged, and the current step number. Re-read `plan.md` for the next step's tasks.
+- **Between steps or review/fix cycles, reload state from disk before acting.** Re-read the current scoped plan file from `.github/plans/`, refresh SQL todo status, and only then dispatch the next agent. Carry forward identifiers such as the active PR/branch, but do not rely on prior in-memory step details.
 
 ## Measurement Results
 
@@ -131,4 +131,5 @@ When an agent makes a mistake (build failure, incorrect assumption, missed edge 
 - **Check existing infrastructure FIRST, but verify it works on the actual target** — Before building custom solutions, check what the submodule/tooling already provides. But "it exists" ≠ "it works for our scenario." Always verify existing tools work on the actual target platform/OS version before committing to using them. For new platform support, research must answer: (1) does the tool exist? (2) does it work on our specific target?
 - **Every CLI command a feature depends on must be tested before implementation begins** — Multiple hours were lost building features around commands that don't work as assumed: `log stream --device` (doesn't exist), `xcrun devicectl --json-output /dev/stdout` (unparseable), `xharness mlaunch` (broken on iOS 17+). Require the researcher to run each critical command and report actual output before the implementer writes any code.
 - **Don't build fragile pre-flight checks — use error handling at the point of use** — Three iterations of sudo pre-flight checking (`sudo -n true`, `sudo -n log help`, `sudo -n log collect --help`) all failed for different reasons. Pre-flight checks for CLI tools are inherently fragile because flag behavior, exit codes, and subcommand availability vary across OS versions. Instead, let commands fail naturally and provide clear error messages at the point of failure.
+- **When migrating workflow state files, update every writer and reader in the same change** — moving persistent state from repo-root files to scoped files is incomplete unless planner/orchestrator instructions and reload points all switch to the new location together.
 - **Cross-reference new code with existing working code in the same repo** — When the repo already has a working implementation of a pattern (e.g., `ios/collect_nettrace.sh` for device discovery), check it before writing new code. Existing code has already survived debugging and captures hard-won knowledge about edge cases.
