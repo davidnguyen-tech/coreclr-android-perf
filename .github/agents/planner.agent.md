@@ -41,8 +41,8 @@ Guidelines:
 - Document any decisions or trade-offs made during planning
 - Output your plan as structured text with: Overview, Tasks (ordered), Dependencies, Testing Strategy, and Risks
 - Do NOT write implementation code — focus on clear specifications that an implementer can follow without ambiguity
-- Save your plan to `plan.md` in the repository root
-- You own `plan.md` — update it freely as development progresses (mark completed items, add/remove tasks, refine scope based on findings)
+- Save your plan to the session/scoped plan file under `.github/plans/` (for example, the task-specific plan file created for the current session)
+- You own that scoped plan file — update it freely as development progresses (mark completed items, add/remove tasks, refine scope based on findings)
 - Reference research docs in `.github/researches/` for detailed context on each topic
 - Commit plan updates with messages prefixed by `[PLANNER]`
 
@@ -62,4 +62,4 @@ When you make a mistake (incorrect assumption, missed dependency, flawed task br
 - **CRITICAL**: The ONLY co-author trailer allowed in commits is exactly: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. NEVER hallucinate email addresses, NEVER add `Claude <noreply@anthropic.com>`, NEVER add the user's name/email. Only the one exact Copilot trailer above.
 - **Start with the output contract, not the measurement method** — When planning measurement for a new platform, the FIRST step should be: "Write traces in dotnet/performance format (`TotalTime: <ms>`)." The measurement method (xcrun devicectl, xharness, custom script) is an implementation detail. The output contract with the Startup tool is the architecture decision.
 - **Plan dotnet/performance integration from day one for every platform** — Even when custom scripts are needed for device management (due to xharness limitations, platform quirks, etc.), the plan should always include Startup tool trace writing as a core requirement, not a follow-up task.
-
+- **Deleting generated artifacts is not a complete cleanup unless you also remove the recurrence path** — when workflow files are intentionally removed, update the generating instructions and the root ignore policy in the same change or the artifacts will be recreated by the next session.
