@@ -17,4 +17,32 @@
     </PropertyGroup>
     <Message Importance="High" Text="Resetting the value of AndroidStripILAfterAOT to original value: '$(_AndroidStripILAfterAOTBackup)'"/>
   </Target>
+
+  <!--
+    External PGO MIBC directory support.
+
+    Pass -p:PgoMibcDir=<path> on the command line to override the app-local
+    profiles/ directory with an external set of *.mibc files for the R2R
+    composite PGO build.
+
+    Example:
+      dotnet build -p:_BuildConfig=R2R_COMP_PGO \
+          -p:PgoMibcDir=/path/to/mibc/android-x64-ci-20260316.2 ...
+
+    When PgoMibcDir is set, ALL previously accumulated app-local *.mibc items
+    are removed and replaced exclusively with files from PgoMibcDir.  This
+    guarantees that the external directory is the sole PGO input — no silent
+    merging with app-local profiles/ entries.  The property is Android-scoped
+    and only takes effect when PublishReadyToRunComposite + PGO are both enabled.
+  -->
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'
+                        And '$(PublishReadyToRun)' == 'true'
+                        And '$(PublishReadyToRunComposite)' == 'true'
+                        And '$(PGO)' == 'true'
+                        And '$(PgoMibcDir)' != ''">
+    <!-- Remove any app-local profiles added by the .csproj before injecting
+         the external directory so crossgen2 sees only the external MIBC files. -->
+    <_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />
+    <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
+  </ItemGroup>
 </Project>

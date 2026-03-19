@@ -156,20 +156,30 @@ if is_maui:
     # MAUI Controls already sets --partial and includes default MIBC profiles
     # via _MauiPublishReadyToRunPartial and _MauiUseDefaultReadyToRunPgoFiles.
     # Override the default profiles with our own.
+    # Guard on PgoMibcDir == '' so that when an external MIBC dir is supplied
+    # (via -p:PgoMibcDir=...) the app-local profiles are not merged in;
+    # build-workarounds.targets will remove any residual items and inject the
+    # external directory exclusively.
     patch += """
   <!-- Use our own PGO profiles instead of MAUI defaults for R2R Composite PGO builds -->
   <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
     <_MauiUseDefaultReadyToRunPgoFiles>false</_MauiUseDefaultReadyToRunPgoFiles>
   </PropertyGroup>
-  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
+  <!-- App-local profiles: skipped when an external PgoMibcDir is provided -->
+  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(PgoMibcDir)' == ''">
     <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
   </ItemGroup>
 """
 else:
-    # Non-MAUI apps: set --partial and MIBC profiles ourselves
+    # Non-MAUI apps: set --partial and MIBC profiles ourselves.
+    # Guard on PgoMibcDir == '' so that when an external MIBC dir is supplied
+    # (via -p:PgoMibcDir=...) the app-local profiles are not merged in;
+    # build-workarounds.targets will remove any residual items and inject the
+    # external directory exclusively.
     patch += """
   <!-- PGO profile support for R2R Composite builds -->
-  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
+  <!-- App-local profiles: skipped when an external PgoMibcDir is provided -->
+  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(PgoMibcDir)' == ''">
     <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
   </ItemGroup>
   <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">

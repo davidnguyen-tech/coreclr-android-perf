@@ -2,8 +2,9 @@
 
 source "$(dirname "$0")/init.sh"
 
-# Extract --platform flag from arguments, default to android
+# Extract --platform and --pgo-mibc-dir flags from arguments, default to android
 PLATFORM="android"
+PGO_MIBC_DIR=""
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -18,6 +19,14 @@ while [[ $# -gt 0 ]]; do
         --platform=*)
             PLATFORM="${1#*=}"
             shift
+            ;;
+        --pgo-mibc-dir)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --pgo-mibc-dir requires a directory path"
+                exit 1
+            fi
+            PGO_MIBC_DIR="$2"
+            shift 2
             ;;
         *)
             POSITIONAL_ARGS+=("$1")
@@ -35,9 +44,10 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
 fi
 
 if [[ -z "$1" || -z "$2" ]]; then
-    echo "Usage: $0 [--platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>] <app-name> <build-config> <build|run> <ntimes> [additional_args]"
+    echo "Usage: $0 [--platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>] <app-name> <build-config> <build|run> <ntimes> [--pgo-mibc-dir <path>] [additional_args]"
     echo "  --platform: target platform (android, android-emulator, ios, ios-simulator, osx, maccatalyst) (default: android)"
     echo "  build-config: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
+    echo "  --pgo-mibc-dir: directory containing *.mibc files for R2R_COMP_PGO builds"
     exit 1
 fi
 
@@ -76,9 +86,19 @@ fi
 
 REPEAT_COUNT=$4
 
-if [[ -n "$5" ]]; then
-    MSBUILD_ARGS="$MSBUILD_ARGS $5"
+if [ -n "$PGO_MIBC_DIR" ]; then
+    if [ ! -d "$PGO_MIBC_DIR" ]; then
+        echo "Error: PGO MIBC directory does not exist: $PGO_MIBC_DIR"
+        exit 1
+    fi
+    MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$PGO_MIBC_DIR"
 fi
+
+# Append any remaining positional args (beyond the first 4) as additional MSBuild args
+shift 4
+for arg in "$@"; do
+    MSBUILD_ARGS="$MSBUILD_ARGS $arg"
+done
 
 echo "Building $SAMPLE_APP with config $BUILD_CONFIG $REPEAT_COUNT times"
 

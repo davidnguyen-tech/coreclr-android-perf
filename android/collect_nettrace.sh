@@ -63,10 +63,12 @@ print_usage() {
     echo "Options:"
     echo "  --platform <android|android-emulator>  Target platform (default: android)"
     echo "  --duration N             Trace duration in seconds (default: 60)"
-    echo "  --force                  Re-collect even if trace already exists"
+    echo "  --force                  Accepted for backwards compatibility; now a no-op"
+    echo "                           (each run writes a unique timestamped file)"
     echo "  --pgo-instrumentation    Include PGO instrumentation env vars for higher-quality traces"
+    echo "  --pgo-mibc-dir <path>    Directory containing *.mibc files for R2R_COMP_PGO builds"
     echo ""
-    echo "Output: traces/<app>_<config>/android-startup.nettrace"
+    echo "Output: traces/<app>_<config>/android-startup-<YYYYMMDD-HHMMSS>.nettrace"
     exit 1
 }
 
@@ -83,8 +85,8 @@ shift 2
 
 PLATFORM="android"
 DURATION=60
-FORCE=false
 PGO_INSTRUMENTATION=false
+PGO_MIBC_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -109,12 +111,21 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --force)
-            FORCE=true
+            # No-op: each run now writes a unique timestamped file, so --force is
+            # no longer needed.  Accepted silently for backwards compatibility.
             shift
             ;;
         --pgo-instrumentation)
             PGO_INSTRUMENTATION=true
             shift
+            ;;
+        --pgo-mibc-dir)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --pgo-mibc-dir requires a directory path"
+                exit 1
+            fi
+            PGO_MIBC_DIR="$2"
+            shift 2
             ;;
         *)
             echo "Unknown option: $1"
@@ -178,17 +189,11 @@ if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Check if trace already exists
+# Set up trace output path (timestamped so repeated runs never overwrite)
 # ---------------------------------------------------------------------------
 TRACE_DIR="$TRACES_DIR/${SAMPLE_APP}_${BUILD_CONFIG}"
-TRACE_FILE="$TRACE_DIR/android-startup.nettrace"
-
-if [ -f "$TRACE_FILE" ] && [ "$FORCE" = false ]; then
-    TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
-    echo "Trace already exists: $TRACE_FILE ($TRACE_SIZE bytes)"
-    echo "Use --force to re-collect."
-    exit 0
-fi
+TRACE_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+TRACE_FILE="$TRACE_DIR/android-startup-${TRACE_TIMESTAMP}.nettrace"
 
 mkdir -p "$TRACE_DIR"
 
@@ -205,6 +210,14 @@ MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG -p:DiagnosticAddress=$DIAG_ADDRESS -
 
 if [ "$PGO_INSTRUMENTATION" = true ]; then
     MSBUILD_ARGS="$MSBUILD_ARGS -p:CollectNetTrace=true"
+fi
+
+if [ -n "$PGO_MIBC_DIR" ]; then
+    if [ ! -d "$PGO_MIBC_DIR" ]; then
+        echo "Error: PGO MIBC directory does not exist: $PGO_MIBC_DIR"
+        exit 1
+    fi
+    MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$PGO_MIBC_DIR"
 fi
 
 # Determine package name
@@ -410,10 +423,19 @@ if [ -f "$TRACE_FILE" ]; then
     TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
     echo "Trace file: $TRACE_FILE ($TRACE_SIZE bytes)"
 
-    if [ "$TRACE_SIZE" -lt 1000 ]; then
-        echo "WARNING: Trace file is suspiciously small ($TRACE_SIZE bytes)."
-        echo "The app may not have connected to dsrouter properly."
-        echo "Check that a device is connected (adb devices) and that port 9000 is not in use."
+    # A usable nettrace must contain at minimum the file header plus a handful
+    # of JIT/loader events.  Empirically, even the shortest valid startup traces
+    # are several hundred KB.  Anything below 8 KB is certainly truncated or
+    # empty (e.g. dsrouter never received a connection).  Treat this as a hard
+    # error so callers (e.g. run_create_mibc.sh) don't attempt to convert a
+    # corrupt file.
+    if [ "$TRACE_SIZE" -lt 8192 ]; then
+        echo "ERROR: Trace file is too small to be usable ($TRACE_SIZE bytes < 8 KB)."
+        echo "The app likely did not connect to dsrouter. Verify:"
+        echo "  1. A device is connected:  adb devices"
+        echo "  2. Port 9000 is not blocked:  lsof -i :9000"
+        echo "  3. adb reverse is active:  adb reverse --list"
+        exit 1
     fi
 else
     echo "ERROR: No trace file was produced."

@@ -25,6 +25,7 @@ print_usage() {
     echo "  --prebuilt                    Measure a pre-built binary (skip build step)"
     echo "  --package-path <path>         Path to pre-built package (.apk, .app, .ipa)"
     echo "  --package-name <bundle-id>    Bundle ID override (auto-detected if omitted)"
+    echo "  --pgo-mibc-dir <path>         Directory containing *.mibc files for R2R_COMP_PGO builds"
     echo "  --disable-animations          Disable device animations during measurement"
     echo "  --use-fully-drawn-time        Use fully drawn time instead of displayed time"
     echo "  --fully-drawn-extra-delay N   Extra delay in seconds for fully drawn time"
@@ -47,6 +48,7 @@ PLATFORM="android"
 PREBUILT=false
 PREBUILT_PACKAGE_PATH=""
 PREBUILT_PACKAGE_NAME=""
+PGO_MIBC_DIR=""
 PASSTHROUGH_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -76,6 +78,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             PREBUILT_PACKAGE_NAME="$2"
+            shift 2
+            ;;
+        --pgo-mibc-dir)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --pgo-mibc-dir requires a directory path"
+                exit 1
+            fi
+            PGO_MIBC_DIR="$2"
             shift 2
             ;;
         *)
@@ -198,6 +208,15 @@ else
 
     # Build config determines all MSBuild properties (including UseMonoRuntime)
     MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG"
+
+    # Add PGO MIBC directory if specified
+    if [ -n "$PGO_MIBC_DIR" ]; then
+        if [ ! -d "$PGO_MIBC_DIR" ]; then
+            echo "Error: PGO MIBC directory does not exist: $PGO_MIBC_DIR"
+            exit 1
+        fi
+        MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$PGO_MIBC_DIR"
+    fi
 
     # Determine package name from the csproj
     PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$APP_DIR/$SAMPLE_APP.csproj" | sed 's/<ApplicationId>//')
