@@ -2,8 +2,9 @@
 
 source "$(dirname "$0")/init.sh"
 
-# Extract --platform flag from arguments, default to android
+# Extract --platform and --pgo-mibc-dir flags from arguments, default to android
 PLATFORM="android"
+PGO_MIBC_DIR=""
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -18,6 +19,14 @@ while [[ $# -gt 0 ]]; do
         --platform=*)
             PLATFORM="${1#*=}"
             shift
+            ;;
+        --pgo-mibc-dir)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --pgo-mibc-dir requires a directory path"
+                exit 1
+            fi
+            PGO_MIBC_DIR="$2"
+            shift 2
             ;;
         *)
             POSITIONAL_ARGS+=("$1")
@@ -77,25 +86,19 @@ fi
 
 REPEAT_COUNT=$4
 
-if [[ -n "$5" ]]; then
-    if [[ "$5" == "--pgo-mibc-dir" ]]; then
-        if [[ -z "$6" ]]; then
-            echo "Error: --pgo-mibc-dir requires a directory path"
-            exit 1
-        fi
-        if [ ! -d "$6" ]; then
-            echo "Error: PGO MIBC directory does not exist: $6"
-            exit 1
-        fi
-        MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$6"
-        # Process remaining args after --pgo-mibc-dir
-        if [[ -n "$7" ]]; then
-            MSBUILD_ARGS="$MSBUILD_ARGS $7"
-        fi
-    else
-        MSBUILD_ARGS="$MSBUILD_ARGS $5"
+if [ -n "$PGO_MIBC_DIR" ]; then
+    if [ ! -d "$PGO_MIBC_DIR" ]; then
+        echo "Error: PGO MIBC directory does not exist: $PGO_MIBC_DIR"
+        exit 1
     fi
+    MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$PGO_MIBC_DIR"
 fi
+
+# Append any remaining positional args (beyond the first 4) as additional MSBuild args
+shift 4
+for arg in "$@"; do
+    MSBUILD_ARGS="$MSBUILD_ARGS $arg"
+done
 
 echo "Building $SAMPLE_APP with config $BUILD_CONFIG $REPEAT_COUNT times"
 
