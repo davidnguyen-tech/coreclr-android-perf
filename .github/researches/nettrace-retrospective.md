@@ -54,7 +54,7 @@ The `_MauiUseDefaultReadyToRunPgoFiles=false` guard only suppresses MAUI SDK's *
 **Fix (two-level defense)**:
 1. **`generate-apps.sh` lines 159–184**: Both MAUI and non-MAUI `_ReadyToRunPgoFiles` ItemGroups now guard on `'$(PgoMibcDir)' == ''`.
 2. **`android/build-workarounds.targets` lines 38–47**: `Remove="@(_ReadyToRunPgoFiles)"` clears ALL accumulated items before `Include="$(PgoMibcDir)/*.mibc"`.  
-**Evidence**: `results/mibc_evidence.log` captured pre-fix binlog showing both profile sets.  
+**Evidence**: Pre-fix binlog showed both profile sets being passed to crossgen2.  
 **Category**: MSBuild item accumulation semantics misunderstanding.
 
 ### Bug 5: Truncated Nettrace Files Silently Accepted (Session 4–5 / PR #56)
@@ -65,10 +65,10 @@ The `_MauiUseDefaultReadyToRunPgoFiles=false` guard only suppresses MAUI SDK's *
 **Category**: Missing validation gate in pipeline.
 
 ### Bug 6: `dotnet-pgo create-mibc` Returns Exit Code 0 on Failure (Session 4, discovered in PR-prep)
-**Symptom**: `run_create_mibc_any.sh` tested trace `142622.nettrace` → `dotnet-pgo` printed "Read past end of stream" to stderr BUT exited 0. The agent concluded "trace integrity check succeeded" based on exit code alone.  
+**Symptom**: Testing trace `142622.nettrace` with `dotnet-pgo create-mibc` printed "Read past end of stream" to stderr BUT exited 0. The agent concluded "trace integrity check succeeded" based on exit code alone.  
 **Root Cause**: `dotnet-pgo create-mibc` wraps ETLX serialization in a `DeferredRegion.Write` callback. The outer `PgoRootCommand` finishes before the deferred write throws, so the process exits 0 despite the error. No `.mibc` output file is produced.  
 **Fix**: This is an upstream `dotnet-pgo` tool bug — not fixable in this repo. The lesson is: **never trust exit codes alone; verify output content**.  
-**Evidence**: `results/create-mibc-integrity.log` — stderr has exception, exit 0, no output `.mibc`.  
+**Evidence**: stderr contained the exception, exit code was 0, and no output `.mibc` file was produced.  
 **Category**: Upstream tooling defect; verification methodology failure.
 
 ### Bug 7: `build.sh` Positional Arg Parsing for `--pgo-mibc-dir` (PR #56)
@@ -95,10 +95,10 @@ The `_MauiUseDefaultReadyToRunPgoFiles=false` guard only suppresses MAUI SDK's *
 **Problem**: Session 3 switched from GPT-5.4 to Claude Opus 4.6 mid-stream.  
 **Context**: The user decided the current model wasn't productive enough and switched. The model switch itself wasn't a bug, but it added discontinuity.
 
-### 4. Noise Script Accumulation (Sessions 3–4)
-**Problem**: Four one-off validation scripts (`run_collection.sh`, `run_create_mibc.sh`, `run_create_mibc_any.sh`, `verify_mibc.sh`) accumulated in the repo root with hardcoded local paths.  
+### 4. Throwaway Script Accumulation (Sessions 3–4)
+**Problem**: Multiple one-off validation scripts accumulated in the repo root during debugging.  
 **Root Cause**: Each debugging step created a new throwaway script rather than using inline commands or a single parameterized helper.  
-**Lesson**: Use inline shell commands or a single parameterized script for validation. Never create root-level scripts with hardcoded paths.
+**Lesson**: Use inline shell commands or a single parameterized script for validation. Avoid creating untracked scripts during debugging sessions.
 
 ### 5. Testing Stale Traces (Session 4, PR-prep)
 **Problem**: Validation ran `dotnet-pgo create-mibc` on OLD truncated traces (pre-fix artifacts), reported "all traces fail," and nearly blocked the PR.  
@@ -145,7 +145,7 @@ All use the corrected provider mask `0x5F000080018` (line 404/243/566/243 respec
 
 3. **RID mismatch in external MIBC**: The example external MIBC directory was `android-x64-ci-*` (emulator-trained) but the build target was `android-arm64` (device). MIBC files contain method tokens, not native code, so cross-RID usage works for method selection hints but is architecturally questionable.
 
-4. **`--pgo-instrumentation` not always passed**: The `run_collection.sh` wrapper (a local-only script) didn't pass `--pgo-instrumentation`, meaning traces were collected with R2R code executing (sparse JIT events). For high-quality MIBC, `DOTNET_ReadyToRun=0` must be set to force all methods through JIT.
+4. **`--pgo-instrumentation` not always passed during early debugging**: Early trace collection runs didn't pass `--pgo-instrumentation`, meaning traces were collected with R2R code executing (sparse JIT events). For high-quality MIBC, `DOTNET_ReadyToRun=0` must be set to force all methods through JIT.
 
 ---
 
@@ -175,7 +175,7 @@ All use the corrected provider mask `0x5F000080018` (line 404/243/566/243 respec
 
 10. **Validate against current artifacts, not stale ones.** When a directory contains both timestamped (new) and non-timestamped (old) versions of the same artifact, always test the newest ones. Legacy artifacts from before bug fixes are expected to be broken.
 
-11. **One-off validation scripts are technical debt.** Each debugging step shouldn't create a new root-level script with hardcoded paths. Use inline commands, or create a single parameterized helper. If validation scripts are needed, put them in a `scripts/dev/` directory with a README, not in the repo root.
+11. **One-off validation scripts are technical debt.** Each debugging step shouldn't create a new untracked script. Use inline commands, or create a single parameterized helper. If validation scripts are needed, place them in a structured location with documentation, not in the repo root.
 
 12. **Context window is a finite resource — don't explore tangents.** Agent sessions that chase wrong platforms (iOS when targeting Android) or derive values from scratch (provider masks) waste context tokens. Each exploration path should be validated against the task scope before investing tokens.
 
