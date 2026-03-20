@@ -61,6 +61,7 @@ nunit-*.xml
 versions.log
 tools/*
 !tools/apple_measure_lib.sh
+!tools/validate-nettrace.sh
 packages/
 build/
 apps/
