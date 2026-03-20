@@ -45,4 +45,26 @@
     <_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />
     <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
   </ItemGroup>
+
+  <!--
+    Guard against empty MIBC profiles in PGO builds.
+
+    When PGO is enabled (R2R_COMP_PGO config), crossgen2 expects at least one
+    .mibc file to guide hot-method optimization.  If no profiles exist — neither
+    app-local (profiles/*.mibc) nor external (PgoMibcDir) — the resulting
+    composite R2R image is degenerate and may crash on startup.
+
+    This target fires after all _ReadyToRunPgoFiles sources have been evaluated
+    (csproj ItemGroup at eval time + PgoMibcDir injection above) but before
+    crossgen2 begins compilation, providing a clear build-time error.
+  -->
+  <Target Name="_ValidatePgoProfiles"
+          BeforeTargets="PrepareForReadyToRunCompilation"
+          Condition="'$(TargetPlatformIdentifier)' == 'android'
+                     And '$(PGO)' == 'true'
+                     And '$(PublishReadyToRun)' == 'true'
+                     And '$(PublishReadyToRunComposite)' == 'true'">
+    <Error Condition="'@(_ReadyToRunPgoFiles)' == ''"
+           Text="PGO is enabled but no .mibc profile files were found. Either add profiles to the app's profiles/ directory, pass -p:PgoMibcDir=&lt;path&gt; with a directory containing .mibc files, or use R2R_COMP instead of R2R_COMP_PGO." />
+  </Target>
 </Project>
