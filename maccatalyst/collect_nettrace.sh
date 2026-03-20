@@ -158,12 +158,15 @@ echo "Diagnostic socket: $DIAG_SOCKET"
 echo ""
 
 echo "--- Building app ---"
+# EventSourceSupport=false and MetricsSupport=false must match normal (non-diagnostic)
+# build settings to prevent PGO profile mismatch and R2R_COMP_PGO crash.
 ${LOCAL_DOTNET} build -c Release \
     -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
     -tl:off \
     -bl:"$TRACE_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_nettrace.binlog" \
     "$APP_DIR/$SAMPLE_APP.csproj" \
-    -p:_BuildConfig="$BUILD_CONFIG"
+    -p:_BuildConfig="$BUILD_CONFIG" \
+    -p:EventSourceSupport=false -p:MetricsSupport=false
 
 if [ $? -ne 0 ]; then
     echo "Error: Build failed."

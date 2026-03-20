@@ -207,7 +207,10 @@ else
     DIAG_ADDRESS="10.0.2.2"
 fi
 
-MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG -p:DiagnosticAddress=$DIAG_ADDRESS -p:DiagnosticPort=9000 -p:DiagnosticSuspend=true -p:DiagnosticListenMode=connect"
+# EventSourceSupport=false and MetricsSupport=false must match normal (non-diagnostic) build settings.
+# Without these, diagnostic properties trigger AndroidEnableProfiler=true which prevents
+# EventSourceSupport from being trimmed, causing PGO profile mismatch and R2R_COMP_PGO crash.
+MSBUILD_ARGS="-p:_BuildConfig=$BUILD_CONFIG -p:DiagnosticAddress=$DIAG_ADDRESS -p:DiagnosticPort=9000 -p:DiagnosticSuspend=true -p:DiagnosticListenMode=connect -p:EventSourceSupport=false -p:MetricsSupport=false"
 
 if [ "$PGO_INSTRUMENTATION" = true ]; then
     MSBUILD_ARGS="$MSBUILD_ARGS -p:CollectNetTrace=true"
