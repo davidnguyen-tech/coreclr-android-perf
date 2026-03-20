@@ -31,10 +31,40 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
     exit 1
 fi
 
-DOTNET_TRACE="$TOOLS_DIR/dotnet-trace"
+# ---------------------------------------------------------------------------
+# resolve_tool_dll <tool-name>
+#   Dynamically locate a .NET global tool's DLL inside the .store directory.
+#   Returns the first matching path, or empty string if none found.
+#   We prefer running via 'dotnet <tool>.dll' over the native apphost wrapper
+#   because on macOS the apphost binaries acquire com.apple.provenance, and
+#   amfid can SIGKILL them during long-running operations.  Running through
+#   the already-signed dotnet binary avoids this.
+# ---------------------------------------------------------------------------
+resolve_tool_dll() {
+    local tool_name="$1"
+    local pattern="$TOOLS_DIR/.store/${tool_name}/*/${tool_name}/*/tools/*/any/${tool_name}.dll"
+    local match
+    # Use a glob to find the DLL regardless of installed version or TFM
+    for match in $pattern; do
+        if [ -f "$match" ]; then
+            echo "$match"
+            return 0
+        fi
+    done
+    echo ""
+    return 0
+}
 
-if [ ! -f "$DOTNET_TRACE" ]; then
-    echo "Error: dotnet-trace not found at $DOTNET_TRACE. Run ./prepare.sh to install it."
+DOTNET_TRACE_DLL=$(resolve_tool_dll "dotnet-trace")
+
+if [ -n "$DOTNET_TRACE_DLL" ]; then
+    DOTNET_TRACE="$LOCAL_DOTNET $DOTNET_TRACE_DLL"
+else
+    DOTNET_TRACE="$TOOLS_DIR/dotnet-trace"
+fi
+
+if [ -z "$DOTNET_TRACE_DLL" ] && [ ! -f "$TOOLS_DIR/dotnet-trace" ]; then
+    echo "Error: dotnet-trace not found. Run ./prepare.sh to install it."
     exit 1
 fi
 
@@ -160,11 +190,18 @@ fi
 # Validate physical-device-only prerequisites
 # ---------------------------------------------------------------------------
 if [ "$PLATFORM" = "ios" ]; then
-    DSROUTER="$TOOLS_DIR/dotnet-dsrouter"
+    DSROUTER_DLL=$(resolve_tool_dll "dotnet-dsrouter")
+
+    if [ -n "$DSROUTER_DLL" ]; then
+        DSROUTER="$LOCAL_DOTNET $DSROUTER_DLL"
+    else
+        DSROUTER="$TOOLS_DIR/dotnet-dsrouter"
+    fi
+
     XHARNESS="$TOOLS_DIR/xharness"
 
-    if [ ! -f "$DSROUTER" ]; then
-        echo "Error: dotnet-dsrouter not found at $DSROUTER. Run ./prepare.sh to install it."
+    if [ -z "$DSROUTER_DLL" ] && [ ! -f "$TOOLS_DIR/dotnet-dsrouter" ]; then
+        echo "Error: dotnet-dsrouter not found. Run ./prepare.sh to install it."
         exit 1
     fi
 
@@ -397,7 +434,7 @@ if [ "$PLATFORM" = "ios" ]; then
     # NOTE: --forward-port iOS tells dsrouter to use Apple device transport (usbmuxd)
     # instead of ADB. This exact flag value needs runtime verification — see risk #2
     # in the header comments.
-    "$DSROUTER" server-server \
+    $DSROUTER server-server \
         -ipcs "$IPC_NAME" \
         -tcps 127.0.0.1:9000 \
         --forward-port iOS &
@@ -573,7 +610,7 @@ else
     DIAG_PORT_ARG="$DIAG_SOCKET,connect"
 fi
 
-"$DOTNET_TRACE" collect \
+$DOTNET_TRACE collect \
     --output "$TRACE_FILE" \
     --diagnostic-port "$DIAG_PORT_ARG" \
     --duration "$(printf '%02d:%02d:%02d' $((DURATION / 3600)) $(((DURATION % 3600) / 60)) $((DURATION % 60)))" \

@@ -15,10 +15,40 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
     exit 1
 fi
 
-DOTNET_TRACE="$TOOLS_DIR/dotnet-trace"
+# ---------------------------------------------------------------------------
+# resolve_tool_dll <tool-name>
+#   Dynamically locate a .NET global tool's DLL inside the .store directory.
+#   Returns the first matching path, or empty string if none found.
+#   We prefer running via 'dotnet <tool>.dll' over the native apphost wrapper
+#   because on macOS the apphost binaries acquire com.apple.provenance, and
+#   amfid can SIGKILL them during long-running operations.  Running through
+#   the already-signed dotnet binary avoids this.
+# ---------------------------------------------------------------------------
+resolve_tool_dll() {
+    local tool_name="$1"
+    local pattern="$TOOLS_DIR/.store/${tool_name}/*/${tool_name}/*/tools/*/any/${tool_name}.dll"
+    local match
+    # Use a glob to find the DLL regardless of installed version or TFM
+    for match in $pattern; do
+        if [ -f "$match" ]; then
+            echo "$match"
+            return 0
+        fi
+    done
+    echo ""
+    return 0
+}
 
-if [ ! -f "$DOTNET_TRACE" ]; then
-    echo "Error: dotnet-trace not found at $DOTNET_TRACE. Run ./prepare.sh to install it."
+DOTNET_TRACE_DLL=$(resolve_tool_dll "dotnet-trace")
+
+if [ -n "$DOTNET_TRACE_DLL" ]; then
+    DOTNET_TRACE="$LOCAL_DOTNET $DOTNET_TRACE_DLL"
+else
+    DOTNET_TRACE="$TOOLS_DIR/dotnet-trace"
+fi
+
+if [ -z "$DOTNET_TRACE_DLL" ] && [ ! -f "$TOOLS_DIR/dotnet-trace" ]; then
+    echo "Error: dotnet-trace not found. Run ./prepare.sh to install it."
     exit 1
 fi
 
@@ -241,7 +271,7 @@ echo "--- Collecting .nettrace (${DURATION}s) ---"
 # Microsoft-Windows-DotNETRuntime with JIT, Loader, GC, Exception, ThreadPool, Interop events
 PROVIDERS="Microsoft-Windows-DotNETRuntime:0x5F000080018:5,Microsoft-Windows-DotNETRuntime:0x4c14fccbd:5,Microsoft-Windows-DotNETRuntimePrivate:0x4002000b:5"
 
-"$DOTNET_TRACE" collect \
+$DOTNET_TRACE collect \
     --output "$TRACE_FILE" \
     --diagnostic-port "$DIAG_SOCKET,connect" \
     --duration "$(printf '%02d:%02d:%02d' $((DURATION / 3600)) $(((DURATION % 3600) / 60)) $((DURATION % 60)))" \
