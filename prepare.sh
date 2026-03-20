@@ -144,11 +144,13 @@ case "$PLATFORM" in
 esac
 echo "Installing workloads for $PLATFORM: $WORKLOADS"
 
-# Use --skip-manifest-update to install workloads using the manifests already
-# bundled with the SDK (in sdk-manifests/).  This avoids downloading manifests from
-# NuGet and eliminates version-pinning mismatches that plagued the rollback.json
-# approach.  The SDK version in global.json implicitly pins the manifest versions.
-"$LOCAL_DOTNET" workload install $WORKLOADS --skip-manifest-update
+# Allow manifest updates so workload versions align with the SDK's runtime.
+# The SDK-bundled manifests can lag behind (e.g. Preview 1 workload with a
+# Preview 3 runtime), causing P/Invoke crashes for APIs added after the bundled
+# version (e.g. SystemNative_LowLevelFutex_WaitOnAddressTimeout).
+# --include-previews is required because preview SDKs need preview workload
+# manifests, which are excluded from resolution by default.
+"$LOCAL_DOTNET" workload install $WORKLOADS --include-previews
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install workloads."
     exit 1
