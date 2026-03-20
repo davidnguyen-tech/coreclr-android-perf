@@ -21,6 +21,7 @@
 #      may disable diagnostic ports.
 
 source "$(dirname "$0")/../init.sh"
+source "$(dirname "$0")/../tools/validate-nettrace.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites
@@ -584,25 +585,27 @@ TRACE_RESULT=$?
 # ---------------------------------------------------------------------------
 echo ""
 if [ $TRACE_RESULT -ne 0 ]; then
-    echo "Warning: dotnet-trace exited with code $TRACE_RESULT"
+    echo "ERROR: dotnet-trace exited with code $TRACE_RESULT"
 fi
 
-if [ -f "$TRACE_FILE" ]; then
-    TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
-    echo "Trace file: $TRACE_FILE ($TRACE_SIZE bytes)"
-
-    if [ "$TRACE_SIZE" -lt 1000 ]; then
-        echo "WARNING: Trace file is suspiciously small ($TRACE_SIZE bytes)."
-        if [ "$PLATFORM" = "ios" ]; then
-            echo "The app may not have connected to dsrouter properly."
-            echo "Check that a device is connected, port 9000 is not in use,"
-            echo "and the app is signed with a development provisioning profile."
-        else
-            echo "The app may not have connected to the diagnostic port properly."
-        fi
-    fi
-else
+if [ ! -f "$TRACE_FILE" ]; then
     echo "ERROR: No trace file was produced."
+    exit 1
+fi
+
+TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
+echo "Trace file: $TRACE_FILE ($TRACE_SIZE bytes)"
+
+if ! validate_nettrace "$TRACE_FILE"; then
+    if [ "$PLATFORM" = "ios" ]; then
+        echo "ERROR: Trace file failed validation."
+        echo "The app likely did not connect to dsrouter. Verify:"
+        echo "  1. A device is connected and trusted:  xcrun devicectl list devices"
+        echo "  2. Port 9000 is not blocked:  lsof -i :9000"
+        echo "  3. The app is signed with a development provisioning profile"
+    else
+        echo "ERROR: Trace file validation failed. The app may not have connected to the diagnostic port properly."
+    fi
     exit 1
 fi
 
