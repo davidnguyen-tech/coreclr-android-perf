@@ -31,6 +31,10 @@
 [ -n "${_APPLE_MEASURE_LIB_LOADED:-}" ] && return 0
 _APPLE_MEASURE_LIB_LOADED=1
 
+# Source the shared nettrace validation library.
+# Uses BASH_SOURCE to resolve the path relative to this script (both files live in tools/).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-nettrace.sh"
+
 # =============================================================================
 # Prerequisite validation
 # =============================================================================
@@ -1127,15 +1131,15 @@ collect_nettrace() {
 
     # First, check the expected path
     if [ -f "$expected_path" ]; then
-        local file_size
-        file_size=$(wc -c < "$expected_path" | tr -d ' ')
-        if [ "$file_size" -gt 1000 ]; then
+        if validate_nettrace "$expected_path" 2>/dev/null; then
+            local file_size
+            file_size=$(wc -c < "$expected_path" | tr -d ' ')
             cp "$expected_path" "$dest_path"
             echo "Trace collected: $dest_path ($file_size bytes)"
             rm -f "$expected_path"
             return 0
         else
-            echo "Warning: Trace file at $expected_path is suspiciously small ($file_size bytes)." >&2
+            echo "Warning: Trace file at $expected_path failed validation." >&2
         fi
     fi
 
@@ -1152,7 +1156,7 @@ collect_nettrace() {
         if [ -d "$dir" ]; then
             local found
             found=$(find "$dir" -name "${name_pattern}*.nettrace" -size +1k 2>/dev/null | head -1)
-            if [ -n "$found" ]; then
+            if [ -n "$found" ] && validate_nettrace "$found" 2>/dev/null; then
                 local file_size
                 file_size=$(wc -c < "$found" | tr -d ' ')
                 cp "$found" "$dest_path"
