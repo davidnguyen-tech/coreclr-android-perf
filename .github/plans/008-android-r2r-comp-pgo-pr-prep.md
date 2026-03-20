@@ -27,8 +27,8 @@ history with no residual working-tree clutter.
 | 1 | `.github/agents/implementer.agent.md` | Agent guidance update |
 | 2 | `android/build-workarounds.targets` | Remove-then-include external MIBC; replaces app-local profiles |
 | 3 | `android/collect_nettrace.sh` | Hard-error on trace < 8 KB; `--pgo-mibc-dir` collection path |
-| 4 | `build.sh` | `--pgo-mibc-dir` flag plumbed to MSBuild `-p:PgoMibcDir=` |
-| 5 | `generate-apps.sh` | `PgoMibcDir == ''` guard on app-local profile ItemGroups (×2) |
+| 4 | `build.sh` | `--pgo-mibc-dir` flag plumbed to MSBuild `-p:_CUSTOM_MIBC_DIR=` |
+| 5 | `generate-apps.sh` | `_CUSTOM_MIBC_DIR == ''` guard on app-local profile ItemGroups (×2) |
 | 6 | `measure_startup.sh` | `--pgo-mibc-dir` forwarded to `build.sh` invocation |
 
 ### Noise explicitly excluded
@@ -142,8 +142,8 @@ adding external ones, and is scoped to android+R2R+Composite+PGO.
 - [ ] `<_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />` appears **before**
       the `Include` line (order matters in MSBuild ItemGroups).
 - [ ] Condition guards: `TargetPlatformIdentifier == android`, `PublishReadyToRun == true`,
-      `PublishReadyToRunComposite == true`, `PGO == true`, `PgoMibcDir != ''`.
-- [ ] `Include` glob is `$(PgoMibcDir)/*.mibc` (single star, not globstar — matches
+      `PublishReadyToRunComposite == true`, `PGO == true`, `_CUSTOM_MIBC_DIR != ''`.
+- [ ] `Include` glob is `$(_CUSTOM_MIBC_DIR)/*.mibc` (single star, not globstar — matches
       flat directory; document if subdirectories are intentionally excluded).
 - [ ] No property group or target was inadvertently removed by the cherry-pick.
 - [ ] The block sits inside `<Project>` and has correct XML structure (no unclosed tags).
@@ -155,12 +155,12 @@ adding external ones, and is scoped to android+R2R+Composite+PGO.
 ### STEP 6 — Static content review: `generate-apps.sh`
 
 **Goal**: Confirm both ItemGroup conditions (MAUI and non-MAUI) correctly guard
-on `PgoMibcDir == ''` so app-local profiles are suppressed when external MIBC
+on `_CUSTOM_MIBC_DIR == ''` so app-local profiles are suppressed when external MIBC
 is supplied.
 
 **Checklist**:
-- [ ] MAUI block condition includes `and '$(PgoMibcDir)' == ''`.
-- [ ] Non-MAUI block condition includes `and '$(PgoMibcDir)' == ''`.
+- [ ] MAUI block condition includes `and '$(_CUSTOM_MIBC_DIR)' == ''`.
+- [ ] Non-MAUI block condition includes `and '$(_CUSTOM_MIBC_DIR)' == ''`.
 - [ ] Comment in each block references `build-workarounds.targets` as the
       companion file that handles the external MIBC injection (cross-reference
       comment keeps the two files coherent).
@@ -168,7 +168,7 @@ is supplied.
       same guard.
 
 **Acceptance**: Both guards are present and the generated `.csproj` XML would
-produce no app-local profile items when `PgoMibcDir` is non-empty.
+produce no app-local profile items when `_CUSTOM_MIBC_DIR` is non-empty.
 
 ---
 
@@ -197,7 +197,7 @@ the correct threshold, and `--pgo-mibc-dir` collection path is correctly wired.
 **Checklist for `build.sh`**:
 - [ ] `--pgo-mibc-dir <path>` accepted at position `$5`/`$6` and validated
       (directory must exist).
-- [ ] Translates to `-p:PgoMibcDir=<path>` in `$MSBUILD_ARGS`.
+- [ ] Translates to `-p:_CUSTOM_MIBC_DIR=<path>` in `$MSBUILD_ARGS`.
 - [ ] Regression: script still works for `R2R_COMP` (no `--pgo-mibc-dir`) and
       other configs without the new flag.
 - [ ] Usage string updated to document `--pgo-mibc-dir`.

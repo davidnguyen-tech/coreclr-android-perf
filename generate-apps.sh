@@ -156,8 +156,8 @@ if is_maui:
     # MAUI Controls already sets --partial and includes default MIBC profiles
     # via _MauiPublishReadyToRunPartial and _MauiUseDefaultReadyToRunPgoFiles.
     # Override the default profiles with our own.
-    # Guard on PgoMibcDir == '' so that when an external MIBC dir is supplied
-    # (via -p:PgoMibcDir=...) the app-local profiles are not merged in;
+    # Guard on _CUSTOM_MIBC_DIR == '' so that when an external MIBC dir is supplied
+    # (via -p:_CUSTOM_MIBC_DIR=...) the app-local profiles are not merged in;
     # build-workarounds.targets will remove any residual items and inject the
     # external directory exclusively.
     patch += """
@@ -165,21 +165,21 @@ if is_maui:
   <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">
     <_MauiUseDefaultReadyToRunPgoFiles>false</_MauiUseDefaultReadyToRunPgoFiles>
   </PropertyGroup>
-  <!-- App-local profiles: skipped when an external PgoMibcDir is provided -->
-  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(PgoMibcDir)' == ''">
+  <!-- App-local profiles: skipped when an external _CUSTOM_MIBC_DIR is provided -->
+  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(_CUSTOM_MIBC_DIR)' == ''">
     <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
   </ItemGroup>
 """
 else:
     # Non-MAUI apps: set --partial and MIBC profiles ourselves.
-    # Guard on PgoMibcDir == '' so that when an external MIBC dir is supplied
-    # (via -p:PgoMibcDir=...) the app-local profiles are not merged in;
+    # Guard on _CUSTOM_MIBC_DIR == '' so that when an external MIBC dir is supplied
+    # (via -p:_CUSTOM_MIBC_DIR=...) the app-local profiles are not merged in;
     # build-workarounds.targets will remove any residual items and inject the
     # external directory exclusively.
     patch += """
   <!-- PGO profile support for R2R Composite builds -->
-  <!-- App-local profiles: skipped when an external PgoMibcDir is provided -->
-  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(PgoMibcDir)' == ''">
+  <!-- App-local profiles: skipped when an external _CUSTOM_MIBC_DIR is provided -->
+  <ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(_CUSTOM_MIBC_DIR)' == ''">
     <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
   </ItemGroup>
   <PropertyGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'">

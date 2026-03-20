@@ -15,7 +15,7 @@ Two coordinated fixes for Android R2R_COMP_PGO to ensure external MIBC profiles 
 **Issue**: `android/build-workarounds.targets` adds external MIBC files to `_ReadyToRunPgoFiles` ItemGroup **alongside** (not replacing) app-local profiles from `generate-apps.sh`. Both get passed to crossgen2, defeating validation intent.
 
 **Files to modify**:
-1. `android/build-workarounds.targets` — Add property flag when `PgoMibcDir` is set
+1. `android/build-workarounds.targets` — Add property flag when `_CUSTOM_MIBC_DIR` is set
 2. `generate-apps.sh` — Conditionally suppress app-local profiles based on flag
 
 **Implementation**:
@@ -28,8 +28,8 @@ Add a new PropertyGroup that sets a flag when external MIBC is provided:
                           And '$(PublishReadyToRun)' == 'true'
                           And '$(PublishReadyToRunComposite)' == 'true'
                           And '$(PGO)' == 'true'
-                          And '$(PgoMibcDir)' != ''">
-  <PgoMibcDirOverridesAppLocal>true</PgoMibcDirOverridesAppLocal>
+                          And '$(_CUSTOM_MIBC_DIR)' != ''">
+  <_CUSTOM_MIBC_DIR_OverridesAppLocal>true</_CUSTOM_MIBC_DIR_OverridesAppLocal>
 </PropertyGroup>
 ```
 
@@ -37,7 +37,7 @@ Add a new PropertyGroup that sets a flag when external MIBC is provided:
 Update both MAUI and non-MAUI ItemGroup conditions to exclude app-local profiles when flag is set:
 ```
 From: Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true'"
-To:   Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(PgoMibcDirOverridesAppLocal)' != 'true'"
+To:   Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(_CUSTOM_MIBC_DIR_OverridesAppLocal)' != 'true'"
 ```
 
 **Acceptance**: When `--pgo-mibc-dir /path/to/mibc` is passed, `crossgen2` receives ONLY files from `/path/to/mibc`, not app-local profiles. (Verify via binlog or crossgen2 verbose output.)
@@ -111,7 +111,7 @@ fi
 
 | Risk | Mitigation |
 |------|-----------|
-| MSBuild property name collision | Use unique prefix `PgoMibcDirOverridesAppLocal`; check `grep -r "PgoMibcDir" .` to confirm no conflicts |
+| MSBuild property name collision | Use unique prefix `_CUSTOM_MIBC_DIR_OverridesAppLocal`; check `grep -r "_CUSTOM_MIBC_DIR" .` to confirm no conflicts |
 | App-local profiles still used if only one file updated | Add cross-reference comments: `build-workarounds.targets` → "See `generate-apps.sh:164,172`"; commit message links both |
 | 10KB threshold too aggressive/lenient | Threshold chosen based on typical EventPipe startup traces (100KB+); 10KB is conservative lower bound. Adjust empirically if needed. |
 | Trace validation incomplete | This is **intentional**: only size check, no deep parsing. Full EventPipe validation belongs in downstream `dotnet-pgo` tool, not collection script. |
@@ -135,7 +135,7 @@ dotnet build -c Release \
   -f net9.0-android \
   -r android-x64 \
   -p:_BuildConfig=R2R_COMP_PGO \
-  -p:PgoMibcDir="$EXTERNAL_MIBC"
+  -p:_CUSTOM_MIBC_DIR="$EXTERNAL_MIBC"
 
 # 4. Verify only external MIBC was used (check binlog diagnostics)
 # Expected: _ReadyToRunPgoFiles lists ONLY "$EXTERNAL_MIBC/DotNet_Maui_Android.mibc"
