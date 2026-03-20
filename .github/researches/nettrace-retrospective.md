@@ -28,9 +28,9 @@ The nettrace collection feature was a conceptually simple task — add `dotnet-d
 - `Microsoft-Windows-DotNETRuntime:0x4c14fccbd:5` (R2R, TypeLoader, JitPatchpoint, etc.)
 - `Microsoft-Windows-DotNETRuntimePrivate:0x4002000b:5` (MulticoreJit, internal profiling)  
 
-**Fix**: Session 3 corrected to `0x5F000080018`. Final configuration uses all three provider entries matching `dotnet-optimization`'s reference config.  
+**Fix**: Session 3 corrected to `0x5F000080018`. Final configuration uses all three provider entries matching the reference implementation's config.  
 **Evidence**: `android/collect_nettrace.sh` line 404.  
-**Time Wasted**: Multiple collection cycles with empty traces. User questioned the mask choice vs `dotnet-optimization` reference.  
+**Time Wasted**: Multiple collection cycles with empty traces. User questioned the mask choice vs the reference implementation.  
 **Category**: Insufficient reference implementation research.
 
 ### Bug 3: dsrouter Killed by amfid During Long R2R Builds (Session 3, Mar 17–18)
@@ -84,11 +84,11 @@ The `_MauiUseDefaultReadyToRunPgoFiles=false` guard only suppresses MAUI SDK's *
 ### 1. Context Window Exhaustion (Sessions 1–2)
 **Problem**: Both Session 1 and Session 2 exhausted the agent's context window before completing the task.  
 **Root Cause**: The agent explored too many tangential paths (iOS code when targeting Android, debugging empty traces without first researching provider masks). Each failed attempt consumed context tokens without forward progress.  
-**Lesson**: Front-load research on the exact reference implementation before writing any code. The `dotnet-optimization` repo had the exact provider mask, dsrouter flags, and env var configuration — 30 minutes of reading would have saved hours of debugging.
+**Lesson**: Front-load research on the exact reference implementation before writing any code. The canonical upstream source had the exact provider mask, dsrouter flags, and env var configuration — 30 minutes of reading would have saved hours of debugging.
 
 ### 2. Provider Mask Debugging Loop (Sessions 1–3)
 **Problem**: Multiple iterations trying different provider masks, producing empty traces each time.  
-**Root Cause**: The agent derived provider masks from documentation/guesswork instead of copying the exact values from the reference implementation (`dotnet-optimization`'s `DotNet_Maui_Android_Base` scenario).  
+**Root Cause**: The agent derived provider masks from documentation/guesswork instead of copying the exact values from the reference implementation's MAUI Android scenario config.  
 **Lesson**: For EventPipe providers, the mask values are opaque bitfields. Never derive them — copy them verbatim from a known-working configuration.
 
 ### 3. Agent Model Switch Mid-Session (Session 3)
@@ -153,7 +153,7 @@ All use the corrected provider mask `0x5F000080018` (line 404/243/566/243 respec
 
 ### Technical Lessons
 
-1. **EventPipe provider masks are opaque — copy, don't derive.** The mask `0x5F000080018` encodes specific keyword flags (JIT=0x10, Loader=0x8, GC=0x1, NGen=0x40000000000, etc.). Deriving these from documentation is error-prone. Always copy verbatim from a known-working reference implementation (e.g., `dotnet-optimization`).
+1. **EventPipe provider masks are opaque — copy, don't derive.** The mask `0x5F000080018` encodes specific keyword flags (JIT=0x10, Loader=0x8, GC=0x1, NGen=0x40000000000, etc.). Deriving these from documentation is error-prone. Always copy verbatim from a known-working reference implementation.
 
 2. **macOS amfid kills unsigned long-running processes.** Any tool binary with `com.apple.provenance` (acquired by newly-built/downloaded executables) can be SIGKILL'd by amfid if it runs for extended periods. Workaround: run via `dotnet <tool>.dll` instead of the native apphost.
 
@@ -169,7 +169,7 @@ All use the corrected provider mask `0x5F000080018` (line 404/243/566/243 respec
 
 ### Process Lessons
 
-8. **Front-load research on the reference implementation.** The `dotnet-optimization` repo's `DotNet_Maui_Android_Base` scenario had every configuration detail needed: provider masks, dsrouter flags, env vars, build properties. 30 minutes reading it would have prevented Bugs 2, 3, and parts of Bug 4.
+8. **Front-load research on the reference implementation.** The canonical upstream source's MAUI Android scenario config had every configuration detail needed: provider masks, dsrouter flags, env vars, build properties. 30 minutes reading it would have prevented Bugs 2, 3, and parts of Bug 4.
 
 9. **Never trust exit codes alone — verify output content.** `dotnet-pgo create-mibc` exits 0 on failure (Bug 6). `xcrun devicectl` exits 0 on no-op operations. Always verify: Does the expected output file exist? Does it have expected content? Does the tool's stdout/stderr confirm success?
 
