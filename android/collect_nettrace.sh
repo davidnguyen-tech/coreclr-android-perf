@@ -6,6 +6,7 @@
 # DotNet_Maui_Android_Base scenario.
 
 source "$(dirname "$0")/../init.sh"
+source "$(dirname "$0")/../tools/validate-nettrace.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites
@@ -423,14 +424,8 @@ if [ -f "$TRACE_FILE" ]; then
     TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
     echo "Trace file: $TRACE_FILE ($TRACE_SIZE bytes)"
 
-    # A usable nettrace must contain at minimum the file header plus a handful
-    # of JIT/loader events.  Empirically, even the shortest valid startup traces
-    # are several hundred KB.  Anything below 8 KB is certainly truncated or
-    # empty (e.g. dsrouter never received a connection).  Treat this as a hard
-    # error so callers (e.g. run_create_mibc.sh) don't attempt to convert a
-    # corrupt file.
-    if [ "$TRACE_SIZE" -lt 8192 ]; then
-        echo "ERROR: Trace file is too small to be usable ($TRACE_SIZE bytes < 8 KB)."
+    if ! validate_nettrace "$TRACE_FILE"; then
+        echo "ERROR: Trace file failed validation."
         echo "The app likely did not connect to dsrouter. Verify:"
         echo "  1. A device is connected:  adb devices"
         echo "  2. Port 9000 is not blocked:  lsof -i :9000"
