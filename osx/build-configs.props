@@ -29,7 +29,7 @@
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
     <PublishReadyToRunContainerFormat>macho</PublishReadyToRunContainerFormat>
-    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
     <PGO>True</PGO>
+    <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>
   </PropertyGroup>
 </Project>

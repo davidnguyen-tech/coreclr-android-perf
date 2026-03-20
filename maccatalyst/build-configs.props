@@ -50,7 +50,7 @@
     <_IsPublishing>True</_IsPublishing>
     <PublishReadyToRun>True</PublishReadyToRun>
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
-    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
     <PGO>True</PGO>
+    <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>
   </PropertyGroup>
 </Project>
