@@ -5,6 +5,7 @@
 # Uses a diagnostic port with suspend to capture full startup events.
 
 source "$(dirname "$0")/../init.sh"
+source "$(dirname "$0")/../tools/validate-nettrace.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites
@@ -255,19 +256,19 @@ TRACE_RESULT=$?
 # ---------------------------------------------------------------------------
 echo ""
 if [ $TRACE_RESULT -ne 0 ]; then
-    echo "Warning: dotnet-trace exited with code $TRACE_RESULT"
+    echo "ERROR: dotnet-trace exited with code $TRACE_RESULT"
 fi
 
-if [ -f "$TRACE_FILE" ]; then
-    TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
-    echo "Trace file: $TRACE_FILE ($TRACE_SIZE bytes)"
-
-    if [ "$TRACE_SIZE" -lt 1000 ]; then
-        echo "WARNING: Trace file is suspiciously small ($TRACE_SIZE bytes)."
-        echo "The app may not have connected to the diagnostic port properly."
-    fi
-else
+if [ ! -f "$TRACE_FILE" ]; then
     echo "ERROR: No trace file was produced."
+    exit 1
+fi
+
+TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
+echo "Trace file: $TRACE_FILE ($TRACE_SIZE bytes)"
+
+if ! validate_nettrace "$TRACE_FILE"; then
+    echo "ERROR: Trace file validation failed. The app may not have connected to the diagnostic port properly."
     exit 1
 fi
 
