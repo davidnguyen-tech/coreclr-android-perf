@@ -159,7 +159,7 @@ for i in "${!CONFIGS[@]}"; do
             --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     else
         OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
     fi
     EXIT_CODE=$?
 
