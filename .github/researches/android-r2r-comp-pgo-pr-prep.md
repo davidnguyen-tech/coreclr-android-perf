@@ -32,13 +32,13 @@ All three have their fixes already applied (confirmed by source inspection):
 
 | File | Lines | Fix Implemented |
 |------|-------|-----------------|
-| `android/build-workarounds.targets` | 38–47 | `Remove="@(_ReadyToRunPgoFiles)"` before `Include="$(PgoMibcDir)/*.mibc"` — guarantees external MIBC replaces (not merges with) app-local profiles |
-| `generate-apps.sh` | 163–171, 179–184 | Both MAUI and non-MAUI `_ReadyToRunPgoFiles` ItemGroups now guard on `'$(PgoMibcDir)' == ''`, so app-local profiles are skipped when external dir is supplied |
+| `android/build-workarounds.targets` | 38–47 | `Remove="@(_ReadyToRunPgoFiles)"` before `Include="$(_CUSTOM_MIBC_DIR)/*.mibc"` — guarantees external MIBC replaces (not merges with) app-local profiles |
+| `generate-apps.sh` | 163–171, 179–184 | Both MAUI and non-MAUI `_ReadyToRunPgoFiles` ItemGroups now guard on `'$(_CUSTOM_MIBC_DIR)' == ''`, so app-local profiles are skipped when external dir is supplied |
 | `android/collect_nettrace.sh` | 66,113–116, 118–119, 192–221, 422–439 | Timestamped trace files (no overwrite), `--force` now a no-op with backwards-compat message, `--pgo-instrumentation` flag added, 8 KB hard-error threshold for truncated traces |
 
 **Important:** `apps/dotnet-new-maui/dotnet-new-maui.csproj` is in the `.gitignore`
 (`apps/` line, `.gitignore:69`) — it is a **generated** artifact. Its correct state
-(lines 85–88 with `PgoMibcDir == ''` guard) reflects the `generate-apps.sh` fix, not a
+(lines 85–88 with `_CUSTOM_MIBC_DIR == ''` guard) reflects the `generate-apps.sh` fix, not a
 tracked file. Do NOT include it in the PR.
 
 ### Helper/Noise Scripts — Must Exclude from PR
@@ -83,17 +83,17 @@ versions.log          # .gitignore line 61
 
 ## Patterns
 
-### The Two-Level PgoMibcDir Override Pattern
+### The Two-Level _CUSTOM_MIBC_DIR Override Pattern
 
 The fix uses a two-level defense so that external MIBC truly replaces app-local profiles:
 
 1. **`generate-apps.sh`** (csproj generation time): guards the `_ReadyToRunPgoFiles` Include
-   with `and '$(PgoMibcDir)' == ''` so the csproj never adds local profiles when an external
+   with `and '$(_CUSTOM_MIBC_DIR)' == ''` so the csproj never adds local profiles when an external
    dir will be provided.
 
 2. **`android/build-workarounds.targets`** (build time): executes a `Remove + Include`
    ItemGroup that clears any accumulated `_ReadyToRunPgoFiles` (belt-and-suspenders in case
-   the csproj still added something) then re-populates from `$(PgoMibcDir)/*.mibc` exclusively.
+   the csproj still added something) then re-populates from `$(_CUSTOM_MIBC_DIR)/*.mibc` exclusively.
 
 Comment in `build-workarounds.targets` (lines 22–37) is the canonical documentation of this
 two-level guarantee.
@@ -232,7 +232,7 @@ Before opening PR, validate these items on the fresh branch:
 
 | # | Check | Command / Method |
 |---|-------|-----------------|
-| 1 | `generate-apps.sh` produces csproj with `PgoMibcDir == ''` guard | `./generate-apps.sh android; grep -n PgoMibcDir apps/dotnet-new-maui/dotnet-new-maui.csproj` |
+| 1 | `generate-apps.sh` produces csproj with `_CUSTOM_MIBC_DIR == ''` guard | `./generate-apps.sh android; grep -n _CUSTOM_MIBC_DIR apps/dotnet-new-maui/dotnet-new-maui.csproj` |
 | 2 | Build with `--pgo-mibc-dir` uses ONLY external MIBC | `./android/collect_nettrace.sh dotnet-new-maui R2R_COMP_PGO --pgo-mibc-dir /path/to/mibc`; then `grep -i "ReadyToRunPgoFiles\|mibc" <binlog-extracted-log>` |
 | 3 | Second collection runs without `--force` | Run `collect_nettrace.sh` twice consecutively; confirm distinct timestamped files in `traces/` |
 | 4 | `--force` accepted silently | `./android/collect_nettrace.sh dotnet-new-maui R2R_COMP_PGO --force`; no error, no breakage |
@@ -246,7 +246,7 @@ Before opening PR, validate these items on the fresh branch:
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
 | `feature/apple-agents` has diverged from the commit point where fix branch was based | Medium | Run `git log feature/apple-agents..fix/android-r2r-comp-pgo-collect-ux` to check; resolve any conflicts on the 3 targeted files manually |
-| `build-workarounds.targets` Remove fires on non-PGO builds | Low | Condition gates on `$(PGO) == 'true'` AND `$(PgoMibcDir) != ''` — only fires when both are set |
+| `build-workarounds.targets` Remove fires on non-PGO builds | Low | Condition gates on `$(PGO) == 'true'` AND `$(_CUSTOM_MIBC_DIR) != ''` — only fires when both are set |
 | MIBC arch mismatch (external `android-x64` dir used for `android-arm64` build) | Medium | This is a training run concern, not a build correctness concern; crossgen2 uses MIBC for method selection hints regardless of the training arch |
 | `run_create_mibc_any.sh` might be expected as a repo utility | Low | References gitignored `tools/dotnet-pgo`; should not be tracked; if a utility is needed, a proper one using `$TOOLS_DIR` should be written |
 

@@ -36,7 +36,7 @@ From `apps/dotnet-new-maui/dotnet-new-maui.csproj` lines 82–88:
 <PropertyGroup>
   <_MauiUseDefaultReadyToRunPgoFiles>false</_MauiUseDefaultReadyToRunPgoFiles>
 </PropertyGroup>
-<ItemGroup Condition="... and '$(PgoMibcDir)' == ''">
+<ItemGroup Condition="... and '$(_CUSTOM_MIBC_DIR)' == ''">
   <_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />
 </ItemGroup>
 ```

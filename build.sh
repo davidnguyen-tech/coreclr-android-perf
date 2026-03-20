@@ -91,7 +91,7 @@ if [ -n "$PGO_MIBC_DIR" ]; then
         echo "Error: PGO MIBC directory does not exist: $PGO_MIBC_DIR"
         exit 1
     fi
-    MSBUILD_ARGS="$MSBUILD_ARGS -p:PgoMibcDir=$PGO_MIBC_DIR"
+    MSBUILD_ARGS="$MSBUILD_ARGS -p:_CUSTOM_MIBC_DIR=$PGO_MIBC_DIR"
 fi
 
 # Append any remaining positional args (beyond the first 4) as additional MSBuild args

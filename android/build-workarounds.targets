@@ -21,16 +21,16 @@
   <!--
     External PGO MIBC directory support.
 
-    Pass -p:PgoMibcDir=<path> on the command line to override the app-local
+    Pass -p:_CUSTOM_MIBC_DIR=<path> on the command line to override the app-local
     profiles/ directory with an external set of *.mibc files for the R2R
     composite PGO build.
 
     Example:
       dotnet build -p:_BuildConfig=R2R_COMP_PGO \
-          -p:PgoMibcDir=/path/to/mibc/android-x64-ci-20260316.2 ...
+          -p:_CUSTOM_MIBC_DIR=/path/to/mibc/android-x64-ci-20260316.2 ...
 
-    When PgoMibcDir is set, ALL previously accumulated app-local *.mibc items
-    are removed and replaced exclusively with files from PgoMibcDir.  This
+    When _CUSTOM_MIBC_DIR is set, ALL previously accumulated app-local *.mibc items
+    are removed and replaced exclusively with files from _CUSTOM_MIBC_DIR.  This
     guarantees that the external directory is the sole PGO input — no silent
     merging with app-local profiles/ entries.  The property is Android-scoped
     and only takes effect when PublishReadyToRunComposite + PGO are both enabled.
@@ -39,11 +39,11 @@
                         And '$(PublishReadyToRun)' == 'true'
                         And '$(PublishReadyToRunComposite)' == 'true'
                         And '$(PGO)' == 'true'
-                        And '$(PgoMibcDir)' != ''">
+                        And '$(_CUSTOM_MIBC_DIR)' != ''">
     <!-- Remove any app-local profiles added by the .csproj before injecting
          the external directory so crossgen2 sees only the external MIBC files. -->
     <_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />
-    <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
+    <_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />
   </ItemGroup>
 
   <!--
@@ -51,11 +51,11 @@
 
     When PGO is enabled (R2R_COMP_PGO config), crossgen2 expects at least one
     .mibc file to guide hot-method optimization.  If no profiles exist — neither
-    app-local (profiles/*.mibc) nor external (PgoMibcDir) — the resulting
+    app-local (profiles/*.mibc) nor external (_CUSTOM_MIBC_DIR) — the resulting
     composite R2R image is degenerate and may crash on startup.
 
     This target fires after all _ReadyToRunPgoFiles sources have been evaluated
-    (csproj ItemGroup at eval time + PgoMibcDir injection above) but before
+    (csproj ItemGroup at eval time + _CUSTOM_MIBC_DIR injection above) but before
     crossgen2 begins compilation, providing a clear build-time error.
   -->
   <Target Name="_ValidatePgoProfiles"
@@ -65,6 +65,6 @@
                      And '$(PublishReadyToRun)' == 'true'
                      And '$(PublishReadyToRunComposite)' == 'true'">
     <Error Condition="'@(_ReadyToRunPgoFiles)' == ''"
-           Text="PGO is enabled but no .mibc profile files were found. Either add profiles to the app's profiles/ directory, pass -p:PgoMibcDir=&lt;path&gt; with a directory containing .mibc files, or use R2R_COMP instead of R2R_COMP_PGO." />
+           Text="PGO is enabled but no .mibc profile files were found. Either add profiles to the app's profiles/ directory, pass -p:_CUSTOM_MIBC_DIR=&lt;path&gt; with a directory containing .mibc files, or use R2R_COMP instead of R2R_COMP_PGO." />
   </Target>
 </Project>

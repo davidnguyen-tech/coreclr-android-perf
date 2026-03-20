@@ -14,14 +14,14 @@
 ### Problem
 When building with `--pgo-mibc-dir`, both sources populate `_ReadyToRunPgoFiles`:
 
-- **`build-workarounds.targets` line 40**: `<_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />`
+- **`build-workarounds.targets` line 40**: `<_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />`
 - **`generate-apps.sh` lines 165/173**: `<_ReadyToRunPgoFiles Include="$(MSBuildThisFileDirectory)profiles/*.mibc" />`
 
 **Both ItemGroups execute**, so crossgen2 receives BOTH sets of `.mibc` files. If the app's `profiles/` directory contains stale or incompatible profiles, they corrupt the PGO data.
 
 ### Evidence
 - **File**: `android/build-workarounds.targets` (lines 35–41)
-  - Comment (line 31–33) claims "Files in PgoMibcDir are added alongside any *.mibc files already listed in the app project's profiles/ directory"
+  - Comment (line 31–33) claims "Files in _CUSTOM_MIBC_DIR are added alongside any *.mibc files already listed in the app project's profiles/ directory"
   - This is **intended** behavior but problematic for validation because app-local profiles take precedence or cause conflicts
 
 - **File**: `generate-apps.sh` (lines 164–166 and 172–174)
@@ -72,7 +72,7 @@ System.IO.EndOfStreamException
 
 **Problem**: Current ItemGroup always adds app-local profiles. Need conditional override.
 
-**Solution**: Add a new ItemGroup that **clears** app-local profiles when `PgoMibcDir` is provided:
+**Solution**: Add a new ItemGroup that **clears** app-local profiles when `_CUSTOM_MIBC_DIR` is provided:
 
 ```xml
 <!-- Clear app-local profiles when external MIBC directory is provided (line 34-41) -->
@@ -80,7 +80,7 @@ System.IO.EndOfStreamException
                           And '$(PublishReadyToRun)' == 'true'
                           And '$(PublishReadyToRunComposite)' == 'true'
                           And '$(PGO)' == 'true'
-                          And '$(PgoMibcDir)' != ''">
+                          And '$(_CUSTOM_MIBC_DIR)' != ''">
   <!-- Remove any items from the app-local profiles ItemGroup -->
   <PgoOverrideAppLocalProfiles>true</PgoOverrideAppLocalProfiles>
 </PropertyGroup>
@@ -104,7 +104,7 @@ System.IO.EndOfStreamException
 </ItemGroup>
 ```
 
-**Result**: When `PgoMibcDir` is set, app-local `profiles/` are skipped, and ONLY external MIBC files are passed to crossgen2.
+**Result**: When `_CUSTOM_MIBC_DIR` is set, app-local `profiles/` are skipped, and ONLY external MIBC files are passed to crossgen2.
 
 ---
 
@@ -171,9 +171,9 @@ grep -n "_ReadyToRunPgoFiles" apps/dotnet-new-maui/dotnet-new-maui.csproj
 # File: android/build-workarounds.targets line 40
 grep -n "_ReadyToRunPgoFiles" android/build-workarounds.targets
 # OUTPUT:
-#   40:    <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
+#   40:    <_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />
 ```
-**Status**: **PASS** — Confirms PgoMibcDir profiles are in workarounds
+**Status**: **PASS** — Confirms _CUSTOM_MIBC_DIR profiles are in workarounds
 
 **Conclusion**: Both ItemGroups exist. MSBuild will merge them → both profile sets passed to crossgen2.
 

@@ -16,13 +16,13 @@ The `_ReadyToRunPgoFiles` MSBuild item is populated from **two independent sourc
    </ItemGroup>
    ```
    This adds `profiles/DotNet_Maui_Android.mibc`, `DotNet_Maui_Android_SampleContent.mibc`,
-   `DotNet_Maui_Blazor_Android.mibc` unconditionally — no guard on `$(PgoMibcDir)`.
+   `DotNet_Maui_Blazor_Android.mibc` unconditionally — no guard on `$(_CUSTOM_MIBC_DIR)`.
 
 2. **`android/build-workarounds.targets` lines 35–41** — conditional APPEND of external MIBC
-   when `PgoMibcDir` is set:
+   when `_CUSTOM_MIBC_DIR` is set:
    ```xml
-   <ItemGroup Condition="... And '$(PgoMibcDir)' != ''">
-     <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
+   <ItemGroup Condition="... And '$(_CUSTOM_MIBC_DIR)' != ''">
+     <_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />
    </ItemGroup>
    ```
    This **appends** to whatever was already in `_ReadyToRunPgoFiles`. There is no `Remove`.
@@ -31,7 +31,7 @@ The `_MauiUseDefaultReadyToRunPgoFiles=false` guard (csproj line 83) only preven
 SDK-internal default profiles — it has zero effect on the csproj's own explicit include above.
 
 **Net result:** When `--pgo-mibc-dir` is passed, crossgen2 receives ALL files from BOTH
-`profiles/*.mibc` (3 app-local) AND `PgoMibcDir/*.mibc` (N external). The external path is
+`profiles/*.mibc` (3 app-local) AND `_CUSTOM_MIBC_DIR/*.mibc` (N external). The external path is
 passed and consumed, but alongside the app-local ones, not instead of them.
 
 ### Where the bug lives
@@ -39,14 +39,14 @@ passed and consumed, but alongside the app-local ones, not instead of them.
 | File | Line | Code | Role |
 |------|------|------|------|
 | `apps/dotnet-new-maui/dotnet-new-maui.csproj` | 82–87 | `_MauiUseDefaultReadyToRunPgoFiles=false` + `Include profiles/*.mibc` | Adds local profiles unconditionally |
-| `android/build-workarounds.targets` | 35–41 | `Include $(PgoMibcDir)/*.mibc` | Appends external, no Remove |
+| `android/build-workarounds.targets` | 35–41 | `Include $(_CUSTOM_MIBC_DIR)/*.mibc` | Appends external, no Remove |
 
 ### Why "external path not proving consumption"
 
 The binlog (written to `traces/dotnet-new-maui_R2R_COMP_PGO/dotnet-new-maui_R2R_COMP_PGO_nettrace.binlog`
 and `verify-profile-consumption.binlog`) would show BOTH sets of mibc passed to crossgen2. The
 verify build (`verify-profile-consumption.diag.log`, 37 MB, detailed verbosity) was run **without**
-`-p:PgoMibcDir=...`, so it only reflects app-local profiles. No diagnostic log captured the
+`-p:_CUSTOM_MIBC_DIR=...`, so it only reflects app-local profiles. No diagnostic log captured the
 external-MIBC run in a way that lists the actual files passed to crossgen2.
 
 ---
@@ -124,7 +124,7 @@ resulting MIBC would have poor method coverage.
 
 ## Recommended Minimal Fixes
 
-### Fix 1 — Issue (1): Remove app-local profiles when `PgoMibcDir` is set
+### Fix 1 — Issue (1): Remove app-local profiles when `_CUSTOM_MIBC_DIR` is set
 
 **Option A (preferred): patch `android/build-workarounds.targets`**
 
@@ -135,17 +135,17 @@ Replace the current ItemGroup (lines 35–41) with:
                       And '$(PublishReadyToRun)' == 'true'
                       And '$(PublishReadyToRunComposite)' == 'true'
                       And '$(PGO)' == 'true'
-                      And '$(PgoMibcDir)' != ''">
+                      And '$(_CUSTOM_MIBC_DIR)' != ''">
   <!-- Remove project-local profiles so only the external MIBC dir is used -->
   <_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />
-  <_ReadyToRunPgoFiles Include="$(PgoMibcDir)/*.mibc" />
+  <_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />
 </ItemGroup>
 ```
 
 The `Remove="@(_ReadyToRunPgoFiles)"` clears whatever the csproj added before the
 targets file runs (Directory.Build.targets executes after the project file's ItemGroups).
 
-**Option B (alternative): gate the csproj include on PgoMibcDir being empty**
+**Option B (alternative): gate the csproj include on _CUSTOM_MIBC_DIR being empty**
 
 In `apps/dotnet-new-maui/dotnet-new-maui.csproj` change line 85 from:
 ```xml
@@ -153,7 +153,7 @@ In `apps/dotnet-new-maui/dotnet-new-maui.csproj` change line 85 from:
 ```
 To:
 ```xml
-<ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(PgoMibcDir)' == ''">
+<ItemGroup Condition="'$(PublishReadyToRun)' == 'true' and '$(PublishReadyToRunComposite)' == 'true' and '$(PGO)' == 'true' and '$(_CUSTOM_MIBC_DIR)' == ''">
 ```
 
 Option A is cleaner since it keeps all external-MIBC logic in `build-workarounds.targets` and
@@ -197,7 +197,7 @@ this researcher. The following command results were inferred from existing log a
 | `dotnet-pgo create-mibc --trace android-startup-20260318-141818.nettrace` | `android-startup-20260318-141818.create-mibc.log` | FAIL — `Read past end of stream` |
 | `./run_collection.sh` (run1, trace=142521) | `results/run1.log` | PASS — "Trace completed.", 1,274,023 bytes |
 | `./run_collection.sh` (run2, trace=142622) | `results/run2.log` | PASS — "Trace completed.", 1,642,285 bytes |
-| `dotnet build -p:_BuildConfig=R2R_COMP_PGO` (no PgoMibcDir) | `verify-profile-consumption.diag.log` | PASS — build succeeded, but app-local profiles only |
+| `dotnet build -p:_BuildConfig=R2R_COMP_PGO` (no _CUSTOM_MIBC_DIR) | `verify-profile-consumption.diag.log` | PASS — build succeeded, but app-local profiles only |
 | `dotnet-pgo create-mibc --trace 142521.nettrace` | NOT YET RUN | unknown |
 | `dotnet-pgo create-mibc --trace 142622.nettrace` | NOT YET RUN | unknown |
 
