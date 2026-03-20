@@ -57,11 +57,12 @@ print_usage() {
     echo "Options:"
     echo "  --platform PLATFORM      Target platform: ios (default) or ios-simulator"
     echo "  --duration N             Trace duration in seconds (default: 60)"
-    echo "  --force                  Re-collect even if trace already exists"
+    echo "  --force                  Accepted for backwards compatibility; now a no-op"
+    echo "                           (each run writes a unique timestamped file)"
     echo "  --device-id UDID         Target device UDID (physical) or simulator UDID"
     echo "  --simulator-name NAME    Simulator name, e.g. 'iPhone 16' (simulator only)"
     echo ""
-    echo "Output: traces/<app>_<config>/ios-startup.nettrace"
+    echo "Output: traces/<app>_<config>/<app>-<platform>-<config>-<YYYYMMDD-HHMMSS>.nettrace"
     exit 1
 }
 
@@ -77,7 +78,6 @@ BUILD_CONFIG=$2
 shift 2
 
 DURATION=60
-FORCE=false
 DEVICE_ID=""
 PLATFORM="ios"
 SIM_NAME=""
@@ -105,7 +105,8 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --force)
-            FORCE=true
+            # No-op: each run now writes a unique timestamped file, so --force is
+            # no longer needed.  Accepted silently for backwards compatibility.
             shift
             ;;
         --device-id)
@@ -305,17 +306,11 @@ print('Unknown')
 fi
 
 # ---------------------------------------------------------------------------
-# Check if trace already exists
+# Set up trace output path (timestamped so repeated runs never overwrite)
 # ---------------------------------------------------------------------------
 TRACE_DIR="$TRACES_DIR/${SAMPLE_APP}_${BUILD_CONFIG}"
-TRACE_FILE="$TRACE_DIR/ios-startup.nettrace"
-
-if [ -f "$TRACE_FILE" ] && [ "$FORCE" = false ]; then
-    TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
-    echo "Trace already exists: $TRACE_FILE ($TRACE_SIZE bytes)"
-    echo "Use --force to re-collect."
-    exit 0
-fi
+TRACE_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+TRACE_FILE="$TRACE_DIR/${SAMPLE_APP}-${PLATFORM}-${BUILD_CONFIG}-${TRACE_TIMESTAMP}.nettrace"
 
 mkdir -p "$TRACE_DIR"
 

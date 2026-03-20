@@ -69,7 +69,7 @@ print_usage() {
     echo "  --pgo-instrumentation    Include PGO instrumentation env vars for higher-quality traces"
     echo "  --pgo-mibc-dir <path>    Directory containing *.mibc files for R2R_COMP_PGO builds"
     echo ""
-    echo "Output: traces/<app>_<config>/android-startup-<YYYYMMDD-HHMMSS>.nettrace"
+    echo "Output: traces/<app>_<config>/<app>-android-<config>-<YYYYMMDD-HHMMSS>.nettrace"
     exit 1
 }
 
@@ -194,7 +194,7 @@ fi
 # ---------------------------------------------------------------------------
 TRACE_DIR="$TRACES_DIR/${SAMPLE_APP}_${BUILD_CONFIG}"
 TRACE_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-TRACE_FILE="$TRACE_DIR/android-startup-${TRACE_TIMESTAMP}.nettrace"
+TRACE_FILE="$TRACE_DIR/${SAMPLE_APP}-android-${BUILD_CONFIG}-${TRACE_TIMESTAMP}.nettrace"
 
 mkdir -p "$TRACE_DIR"
 
