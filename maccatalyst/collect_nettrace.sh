@@ -37,9 +37,10 @@ print_usage() {
     echo "Options:"
     echo "  --platform PLATFORM      Target platform (default: maccatalyst)"
     echo "  --duration N             Trace duration in seconds (default: 60)"
-    echo "  --force                  Re-collect even if trace already exists"
+    echo "  --force                  Accepted for backwards compatibility; now a no-op"
+    echo "                           (each run writes a unique timestamped file)"
     echo ""
-    echo "Output: traces/<app>_<config>/maccatalyst-startup.nettrace"
+    echo "Output: traces/<app>_<config>/<app>-maccatalyst-<config>-<YYYYMMDD-HHMMSS>.nettrace"
     exit 1
 }
 
@@ -55,7 +56,6 @@ BUILD_CONFIG=$2
 shift 2
 
 DURATION=60
-FORCE=false
 PLATFORM="maccatalyst"
 
 while [[ $# -gt 0 ]]; do
@@ -81,7 +81,8 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --force)
-            FORCE=true
+            # No-op: each run now writes a unique timestamped file, so --force is
+            # no longer needed.  Accepted silently for backwards compatibility.
             shift
             ;;
         *)
@@ -111,17 +112,11 @@ if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Check if trace already exists
+# Set up trace output path (timestamped so repeated runs never overwrite)
 # ---------------------------------------------------------------------------
 TRACE_DIR="$TRACES_DIR/${SAMPLE_APP}_${BUILD_CONFIG}"
-TRACE_FILE="$TRACE_DIR/maccatalyst-startup.nettrace"
-
-if [ -f "$TRACE_FILE" ] && [ "$FORCE" = false ]; then
-    TRACE_SIZE=$(wc -c < "$TRACE_FILE" | tr -d ' ')
-    echo "Trace already exists: $TRACE_FILE ($TRACE_SIZE bytes)"
-    echo "Use --force to re-collect."
-    exit 0
-fi
+TRACE_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+TRACE_FILE="$TRACE_DIR/${SAMPLE_APP}-maccatalyst-${BUILD_CONFIG}-${TRACE_TIMESTAMP}.nettrace"
 
 mkdir -p "$TRACE_DIR"
 

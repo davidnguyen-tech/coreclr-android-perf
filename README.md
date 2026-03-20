@@ -233,7 +233,7 @@ Each platform has a `collect_nettrace.sh` script that captures detailed runtime 
 - Android: `--pgo-instrumentation` — Include PGO instrumentation env vars
 - iOS: `--device-id UDID` — Target device UDID (auto-detected if only one device)
 
-**Output:** `traces/<app>_<config>/<platform>-startup.nettrace`
+**Output:** `traces/<app>_<config>/<app>-<platform>-<config>-<YYYYMMDD-HHMMSS>.nettrace`
 
 The trace directory also contains a build binlog and system/device logs for diagnostics.
 
