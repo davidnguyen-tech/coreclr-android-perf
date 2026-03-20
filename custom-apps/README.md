@@ -43,3 +43,24 @@ During `./prepare.sh`, custom apps in this directory are automatically copied in
 
 - Apps must target the expected Target Framework Monikers (TFMs) for the selected platform (e.g., `net11.0-android`, `net11.0-ios`, `net11.0-maccatalyst`, `net11.0-macos`).
 - If your app has external NuGet dependencies, you may need to add the required package feeds to the repo's `NuGet.config`.
+
+## Measuring External MAUI Apps (--csproj)
+
+Instead of placing apps in `custom-apps/`, you can point directly at any MAUI Android app's `.csproj` file using the `--csproj` flag:
+
+```bash
+# Measure a single config
+./measure_startup.sh --csproj /path/to/MyMauiApp/MyMauiApp.csproj CORECLR_JIT
+
+# Measure with nettrace collection
+./measure_startup.sh --csproj /path/to/MyMauiApp/MyMauiApp.csproj R2R_COMP --collect-trace
+
+# Measure all configs for an external app
+./measure_all.sh --csproj /path/to/MyMauiApp/MyMauiApp.csproj
+```
+
+### Requirements for external apps
+
+- The `.csproj` must target the correct TFM for the platform (e.g., `net11.0-android`).
+- The `.csproj` should have an `<ApplicationId>` property (e.g., `com.example.myapp`). If missing, a fallback name is generated.
+- The repository's `Directory.Build.props` and `Directory.Build.targets` do **not** automatically apply to external projects. Build configurations (R2R, PGO, etc.) are passed via MSBuild properties at build time.

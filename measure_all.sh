@@ -8,6 +8,7 @@ ITERATIONS=10
 EXTRA_ARGS=()
 SELECTED_APPS=()
 COLLECT_TRACE_FLAG=""
+CSPROJ_PATH=""
 print_usage() {
     echo "Usage: $0 [options]"
     echo ""
@@ -16,6 +17,7 @@ print_usage() {
     echo "Options:"
     echo "  --platform <name>          Target platform: android, android-emulator, ios, ios-simulator, osx, maccatalyst (default: android)"
     echo "  --app <name>               Measure only this app (can be repeated)"
+    echo "  --csproj <path>            Path to external .csproj file (derives app name, overrides --app)"
     echo "  --startup-iterations N     Number of startup iterations per config (default: 10)"
     echo "  --collect-trace            Collect .nettrace EventPipe traces for each measurement"
     echo "  --help                     Show this help message"
@@ -26,6 +28,7 @@ print_usage() {
     echo "  $0 --startup-iterations 3                   # All apps, all configs, 3 iterations"
     echo "  $0 --app dotnet-new-android                 # Only Android app, all configs"
     echo "  $0 --platform osx --collect-trace           # macOS, all configs, with traces"
+    echo "  $0 --csproj /path/to/MyApp.csproj           # External app, all configs"
     exit 0
 }
 
@@ -45,6 +48,18 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             SELECTED_APPS+=("$2")
+            shift 2
+            ;;
+        --csproj)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --csproj requires a path to a .csproj file"
+                exit 1
+            fi
+            if [[ ! -f "$2" ]]; then
+                echo "Error: .csproj file not found: $2"
+                exit 1
+            fi
+            CSPROJ_PATH="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
             shift 2
             ;;
         --startup-iterations)
@@ -104,6 +119,12 @@ case "$PLATFORM" in
         ;;
 esac
 
+# When --csproj is provided, measure only the external app
+if [ -n "$CSPROJ_PATH" ]; then
+    CSPROJ_APP_NAME="$(basename "$CSPROJ_PATH" .csproj)"
+    APPS=("$CSPROJ_APP_NAME")
+fi
+
 # Default to all apps if none selected
 if [ ${#SELECTED_APPS[@]} -eq 0 ]; then
     SELECTED_APPS=("${APPS[@]}")
@@ -138,6 +159,11 @@ mkdir -p "$RESULTS_DIR"
 SUMMARY_FILE="$RESULTS_DIR/summary.csv"
 echo "app,config,avg_ms,min_ms,max_ms,pkg_size_mb,pkg_size_bytes,build_time_ms,iterations" > "$SUMMARY_FILE"
 
+CSPROJ_ARGS=()
+if [ -n "$CSPROJ_PATH" ]; then
+    CSPROJ_ARGS=(--csproj "$CSPROJ_PATH")
+fi
+
 for i in "${!CONFIGS[@]}"; do
     IFS='|' read -r app config <<< "${CONFIGS[$i]}"
     NUM=$((i + 1))
@@ -147,19 +173,19 @@ for i in "${!CONFIGS[@]}"; do
 
     if [ "$PLATFORM_DEVICE_TYPE" = "ios" ]; then
         OUTPUT=$("$SCRIPT_DIR/ios/measure_device_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${CSPROJ_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     elif [ "$PLATFORM_DEVICE_TYPE" = "ios-simulator" ]; then
         OUTPUT=$("$SCRIPT_DIR/ios/measure_simulator_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${CSPROJ_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     elif [ "$PLATFORM_DEVICE_TYPE" = "osx" ]; then
         OUTPUT=$("$SCRIPT_DIR/osx/measure_osx_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${CSPROJ_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     elif [ "$PLATFORM_DEVICE_TYPE" = "maccatalyst" ]; then
         OUTPUT=$("$SCRIPT_DIR/maccatalyst/measure_maccatalyst_startup.sh" "$app" "$config" \
-            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${EXTRA_ARGS[@]}" 2>&1)
+            --startup-iterations "$ITERATIONS" $COLLECT_TRACE_FLAG "${CSPROJ_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     else
         OUTPUT=$("$SCRIPT_DIR/measure_startup.sh" "$app" "$config" \
-            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${EXTRA_ARGS[@]}" 2>&1)
+            --platform "$PLATFORM" --startup-iterations "$ITERATIONS" "${CSPROJ_ARGS[@]}" "${EXTRA_ARGS[@]}" 2>&1)
     fi
     EXIT_CODE=$?
 
