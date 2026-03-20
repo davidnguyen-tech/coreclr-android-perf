@@ -22,6 +22,7 @@
 
 source "$(dirname "$0")/../init.sh"
 source "$(dirname "$0")/../tools/validate-nettrace.sh"
+source "$(dirname "$0")/../tools/diagnostic_tools_lib.sh"
 
 # ---------------------------------------------------------------------------
 # Validate prerequisites
@@ -31,42 +32,7 @@ if [ ! -f "$LOCAL_DOTNET" ]; then
     exit 1
 fi
 
-# ---------------------------------------------------------------------------
-# resolve_tool_dll <tool-name>
-#   Dynamically locate a .NET global tool's DLL inside the .store directory.
-#   Returns the first matching path, or empty string if none found.
-#   We prefer running via 'dotnet <tool>.dll' over the native apphost wrapper
-#   because on macOS the apphost binaries acquire com.apple.provenance, and
-#   amfid can SIGKILL them during long-running operations.  Running through
-#   the already-signed dotnet binary avoids this.
-# ---------------------------------------------------------------------------
-resolve_tool_dll() {
-    local tool_name="$1"
-    local pattern="$TOOLS_DIR/.store/${tool_name}/*/${tool_name}/*/tools/*/any/${tool_name}.dll"
-    local match
-    # Use a glob to find the DLL regardless of installed version or TFM
-    for match in $pattern; do
-        if [ -f "$match" ]; then
-            echo "$match"
-            return 0
-        fi
-    done
-    echo ""
-    return 0
-}
-
-DOTNET_TRACE_DLL=$(resolve_tool_dll "dotnet-trace")
-
-if [ -n "$DOTNET_TRACE_DLL" ]; then
-    DOTNET_TRACE="$LOCAL_DOTNET $DOTNET_TRACE_DLL"
-else
-    DOTNET_TRACE="$TOOLS_DIR/dotnet-trace"
-fi
-
-if [ -z "$DOTNET_TRACE_DLL" ] && [ ! -f "$TOOLS_DIR/dotnet-trace" ]; then
-    echo "Error: dotnet-trace not found. Run ./prepare.sh to install it."
-    exit 1
-fi
+resolve_dotnet_trace || exit 1
 
 if ! command -v xcrun &> /dev/null; then
     echo "Error: xcrun is required but not found. Please install Xcode."
@@ -190,20 +156,9 @@ fi
 # Validate physical-device-only prerequisites
 # ---------------------------------------------------------------------------
 if [ "$PLATFORM" = "ios" ]; then
-    DSROUTER_DLL=$(resolve_tool_dll "dotnet-dsrouter")
-
-    if [ -n "$DSROUTER_DLL" ]; then
-        DSROUTER="$LOCAL_DOTNET $DSROUTER_DLL"
-    else
-        DSROUTER="$TOOLS_DIR/dotnet-dsrouter"
-    fi
+    resolve_dsrouter || exit 1
 
     XHARNESS="$TOOLS_DIR/xharness"
-
-    if [ -z "$DSROUTER_DLL" ] && [ ! -f "$TOOLS_DIR/dotnet-dsrouter" ]; then
-        echo "Error: dotnet-dsrouter not found. Run ./prepare.sh to install it."
-        exit 1
-    fi
 
     if [ ! -f "$XHARNESS" ]; then
         echo "Error: xharness not found at $XHARNESS. Run ./prepare.sh to install it."
