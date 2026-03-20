@@ -1131,7 +1131,7 @@ collect_nettrace() {
 
     # First, check the expected path
     if [ -f "$expected_path" ]; then
-        if validate_nettrace "$expected_path" 2>/dev/null; then
+        if validate_nettrace "$expected_path"; then
             local file_size
             file_size=$(wc -c < "$expected_path" | tr -d ' ')
             cp "$expected_path" "$dest_path"

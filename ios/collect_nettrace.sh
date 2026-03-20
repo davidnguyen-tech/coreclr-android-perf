@@ -585,7 +585,7 @@ TRACE_RESULT=$?
 # ---------------------------------------------------------------------------
 echo ""
 if [ $TRACE_RESULT -ne 0 ]; then
-    echo "ERROR: dotnet-trace exited with code $TRACE_RESULT"
+    echo "Warning: dotnet-trace exited with code $TRACE_RESULT"
 fi
 
 if [ ! -f "$TRACE_FILE" ]; then
