@@ -560,7 +560,7 @@ get_connected_device_udid() {
     udid=$(python3 -c "
 import json, sys
 try:
-    data = json.load(open('$json_file'))
+    data = json.load(open(sys.argv[1]))
     devices = data.get('result', {}).get('devices', [])
     for d in devices:
         conn = d.get('connectionProperties', {})
@@ -583,7 +583,7 @@ try:
 except Exception as e:
     print(f'Error parsing device list: {e}', file=sys.stderr)
     sys.exit(1)
-" 2>/dev/null)
+" "$json_file" 2>/dev/null)
 
     if [ -z "$udid" ]; then
         echo "Error: No wired iOS device found." >&2
@@ -668,6 +668,7 @@ launch_app_on_device() {
     # The text output format varies across Xcode versions, but JSON is stable.
     local json_file
     json_file=$(mktemp /tmp/devicectl_launch.XXXXXX.json)
+    trap 'rm -f "$json_file"' RETURN
 
     local launch_output
     launch_output=$(xcrun devicectl device process launch \

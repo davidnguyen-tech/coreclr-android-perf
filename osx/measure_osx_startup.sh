@@ -139,7 +139,7 @@ fi
 resolve_platform_config "osx" || exit 1
 
 # Validate build config (Apple platforms: no non-composite R2R)
-VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R_COMP R2R_COMP_PGO"
+VALID_CONFIGS="CORECLR_JIT R2R_COMP R2R_COMP_PGO"
 if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
     echo "Invalid build config '$BUILD_CONFIG'. Allowed values are: $VALID_CONFIGS"
     exit 1

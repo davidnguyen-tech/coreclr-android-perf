@@ -101,7 +101,7 @@ if [ ! -d "$APP_DIR" ]; then
 fi
 
 # Validate build config
-VALID_CONFIGS="MONO_JIT CORECLR_JIT MONO_AOT MONO_PAOT R2R_COMP R2R_COMP_PGO"
+VALID_CONFIGS="CORECLR_JIT R2R_COMP R2R_COMP_PGO"
 if [[ ! " $VALID_CONFIGS " =~ " $BUILD_CONFIG " ]]; then
     echo "Invalid build config '$BUILD_CONFIG'. Allowed values are: $VALID_CONFIGS"
     exit 1

@@ -509,7 +509,7 @@ for ((i = 0; i <= ITERATIONS; i++)); do
     # --- Real measurement iteration ---
     # parse_watchdog_timing returns 4 lines: total_ms, main_ms, draw_ms, last_timestamp
     # This avoids a separate get_last_watchdog_timestamp() call (saving 1-3s per iteration).
-    TIMING=$(parse_watchdog_timing "$LOGARCHIVE" "$BUNDLE_ID" 2>&1)
+    TIMING=$(parse_watchdog_timing "$LOGARCHIVE" "$BUNDLE_ID" 2>/dev/null)
     PARSE_RESULT=$?
 
     if [ $PARSE_RESULT -ne 0 ]; then

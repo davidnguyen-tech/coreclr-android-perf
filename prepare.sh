@@ -138,7 +138,7 @@ case "$PLATFORM" in
     android|android-emulator)
                   WORKLOADS="android maui-android" ;;
     ios|ios-simulator)
-                  WORKLOADS="ios maui-ios maccatalyst" ;;
+                  WORKLOADS="ios maui-ios" ;;
     osx)          WORKLOADS="macos" ;;
     maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst ios" ;;
 esac

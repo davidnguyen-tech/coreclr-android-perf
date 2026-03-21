@@ -74,7 +74,13 @@ resolve_platform_config() {
             ;;
         osx)
             PLATFORM_TFM="net11.0-macos"
-            PLATFORM_RID="osx-arm64"
+            local arch
+            arch="$(uname -m)"
+            if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
+                PLATFORM_RID="osx-arm64"
+            else
+                PLATFORM_RID="osx-x64"
+            fi
             PLATFORM_DEVICE_TYPE="osx"
             PLATFORM_SCENARIO_DIR="$SCENARIOS_DIR/genericmacosstartup"
             PLATFORM_PACKAGE_GLOB="*.app"

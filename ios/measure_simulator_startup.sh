@@ -538,7 +538,6 @@ for ((i = 1; i <= ITERATIONS; i++)); do
 
     # Wait for the app's first log event (indicates runtime initialization)
     if ! wait_for_log_event "$EXECUTABLE_NAME" 30 > /dev/null; then
-        END_NS=$(get_timestamp_ns)
         stop_log_stream
         echo "  [$i/$ITERATIONS] FAILED — no log events within 30s"
         xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" 2>/dev/null || true
@@ -603,7 +602,7 @@ print_measurement_summary "$AVG" "$MIN" "$MAX" "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE
 # ---------------------------------------------------------------------------
 mkdir -p "$RESULTS_DIR"
 RESULT_FILE="$RESULTS_DIR/${SAMPLE_APP}_${BUILD_CONFIG}_simulator.csv"
-save_results_csv "$RESULT_FILE" "$SAMPLE_APP" "$BUILD_CONFIG" "$SIM_NAME_RESOLVED" \
+save_results_csv "$RESULT_FILE" "$SAMPLE_APP" "$BUILD_CONFIG" "simulator" \
     "$PACKAGE_SIZE_MB" "$PACKAGE_SIZE_BYTES" \
     "$AVG" "$MEDIAN" "$MIN" "$MAX" "$STDEV" "$COUNT" "${TIMES[@]}"
 
