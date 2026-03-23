@@ -73,6 +73,7 @@ apps/
 perfdata/
 traces/
 results/
+nettrace-analysis/
 [Nn]u[Gg]et.config
 profiles/
 profiles-old/

@@ -2,22 +2,16 @@
 # =============================================================================
 # tools/analyze-nettrace.sh — Compare .nettrace files between R2R configurations
 #
-# Wrapper script for the nettrace-analyzer C# tool. Supports two modes:
+# Orchestrates the nettrace-analyzer C# tool to extract JIT/R2R method data
+# from two config traces, then computes a JIT method diff using jq.
 #
-#   Direct file mode:
-#     ./tools/analyze-nettrace.sh <file1.nettrace> <file2.nettrace> [report.md]
+# Usage:
+#   ./tools/analyze-nettrace.sh <app-name> <config1> <config2> [--platform <platform>] [--rebuild]
+#   ./tools/analyze-nettrace.sh --help
 #
-#   Auto-discovery mode:
-#     ./tools/analyze-nettrace.sh --app dotnet-new-maui-samplecontent [report.md]
-#     ./tools/analyze-nettrace.sh --app dotnet-new-android --configs CORECLR_JIT R2R_COMP_PGO
-#     ./tools/analyze-nettrace.sh --app dotnet-new-maui --platform ios
-#
-# Options:
-#   --help                  Print usage and exit
-#   --rebuild               Force rebuild of the analyzer before running
-#   --app <name>            Auto-discover latest traces by app name
-#   --platform <platform>   Platform filter for auto-discovery (default: android)
-#   --configs <c1> <c2>     Configs to compare (default: R2R_COMP R2R_COMP_PGO)
+# Examples:
+#   ./tools/analyze-nettrace.sh dotnet-new-maui-samplecontent R2R_COMP R2R_COMP_PGO
+#   ./tools/analyze-nettrace.sh dotnet-new-maui R2R_COMP R2R_COMP_PGO --platform ios
 # =============================================================================
 set -e
 
@@ -39,8 +33,8 @@ fi
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-ANALYZER_PROJECT="$REPO_ROOT/tools/nettrace-analyzer"
-ANALYZER_DLL="$ANALYZER_PROJECT/bin/Release/net8.0/nettrace-analyzer.dll"
+ANALYZER_PROJECT="$REPO_ROOT/tools/nettrace-analyzer/nettrace-analyzer.csproj"
+ANALYZER_DLL="$REPO_ROOT/tools/nettrace-analyzer/bin/Release/net8.0/nettrace-analyzer.dll"
 
 # ---------------------------------------------------------------------------
 # usage — print help text
@@ -48,28 +42,22 @@ ANALYZER_DLL="$ANALYZER_PROJECT/bin/Release/net8.0/nettrace-analyzer.dll"
 usage() {
     cat <<'EOF'
 Usage:
-  analyze-nettrace.sh <file1.nettrace> <file2.nettrace> [report.md]
-  analyze-nettrace.sh --app <name> [report.md]
+  analyze-nettrace.sh <app-name> <config1> <config2> [options]
 
-Direct file mode:
-  Pass two .nettrace files to compare directly.
-  Default report: /tmp/nettrace-comparison-report.md
-
-Auto-discovery mode:
-  --app <name>            Find latest traces by app name under traces/
-  --platform <platform>   Platform filter (default: android)
-  --configs <c1> <c2>     Configs to compare (default: R2R_COMP R2R_COMP_PGO)
-  Default report: results/<app>-nettrace-comparison.md
+Arguments:
+  <app-name>    Application name (e.g. dotnet-new-maui-samplecontent)
+  <config1>     Baseline configuration (e.g. R2R_COMP)
+  <config2>     Comparison configuration (e.g. R2R_COMP_PGO)
 
 Options:
-  --help      Print this help and exit
-  --rebuild   Force rebuild of the analyzer before running
+  --platform <platform>   Platform filter for trace discovery (default: android)
+  --rebuild               Force rebuild of the C# analyzer
+  --help                  Print this help and exit
 
 Examples:
-  ./tools/analyze-nettrace.sh trace1.nettrace trace2.nettrace
-  ./tools/analyze-nettrace.sh --app dotnet-new-maui-samplecontent
-  ./tools/analyze-nettrace.sh --app dotnet-new-android --configs CORECLR_JIT R2R_COMP_PGO
-  ./tools/analyze-nettrace.sh --app dotnet-new-maui --platform ios report.md
+  ./tools/analyze-nettrace.sh dotnet-new-maui-samplecontent R2R_COMP R2R_COMP_PGO
+  ./tools/analyze-nettrace.sh dotnet-new-maui R2R_COMP R2R_COMP_PGO --platform ios
+  ./tools/analyze-nettrace.sh dotnet-new-android CORECLR_JIT R2R_COMP_PGO --rebuild
 EOF
 }
 
@@ -118,13 +106,10 @@ find_latest_trace() {
 }
 
 # ---------------------------------------------------------------------------
-# Parse arguments
+# Step 1: Parse arguments
 # ---------------------------------------------------------------------------
 REBUILD=false
-APP_NAME=""
 PLATFORM="android"
-CONFIG1="R2R_COMP"
-CONFIG2="R2R_COMP_PGO"
 POSITIONAL=()
 
 while [ $# -gt 0 ]; do
@@ -137,18 +122,9 @@ while [ $# -gt 0 ]; do
             REBUILD=true
             shift
             ;;
-        --app)
-            APP_NAME="$2"
-            shift 2
-            ;;
         --platform)
             PLATFORM="$2"
             shift 2
-            ;;
-        --configs)
-            CONFIG1="$2"
-            CONFIG2="$3"
-            shift 3
             ;;
         -*)
             echo "Error: Unknown option: $1" >&2
@@ -162,70 +138,172 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+if [ ${#POSITIONAL[@]} -lt 3 ]; then
+    echo "Error: Required arguments: <app-name> <config1> <config2>" >&2
+    echo "" >&2
+    usage >&2
+    exit 1
+fi
+
+APP="${POSITIONAL[0]}"
+CONFIG1="${POSITIONAL[1]}"
+CONFIG2="${POSITIONAL[2]}"
+
 # ---------------------------------------------------------------------------
-# Lazy build
+# Step 2: Resolve dotnet SDK (already done above)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Step 3: Build analyzer (lazy)
 # ---------------------------------------------------------------------------
 if [ "$REBUILD" = true ] || [ ! -f "$ANALYZER_DLL" ]; then
     build_analyzer
 fi
 
 # ---------------------------------------------------------------------------
-# Determine mode and resolve file paths
+# Step 4: Create timestamped output directory
 # ---------------------------------------------------------------------------
-if [ -n "$APP_NAME" ]; then
-    # --- Auto-discovery mode ---
-    TRACE_DIR1="$REPO_ROOT/traces/${APP_NAME}_${CONFIG1}"
-    TRACE_DIR2="$REPO_ROOT/traces/${APP_NAME}_${CONFIG2}"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+OUTPUT_DIR="$REPO_ROOT/nettrace-analysis/$TIMESTAMP"
+mkdir -p "$OUTPUT_DIR"
 
-    if [ ! -d "$TRACE_DIR1" ]; then
-        echo "Error: Trace directory not found: $TRACE_DIR1" >&2
-        exit 1
-    fi
-    if [ ! -d "$TRACE_DIR2" ]; then
-        echo "Error: Trace directory not found: $TRACE_DIR2" >&2
-        exit 1
-    fi
+# ---------------------------------------------------------------------------
+# Step 5: Auto-discover latest traces
+# ---------------------------------------------------------------------------
+TRACE_DIR1="$REPO_ROOT/traces/${APP}_${CONFIG1}"
+TRACE_DIR2="$REPO_ROOT/traces/${APP}_${CONFIG2}"
 
-    FILE1=$(find_latest_trace "$TRACE_DIR1" "$PLATFORM" "$CONFIG1")
-    FILE2=$(find_latest_trace "$TRACE_DIR2" "$PLATFORM" "$CONFIG2")
+if [ ! -d "$TRACE_DIR1" ]; then
+    echo "Error: Trace directory not found: $TRACE_DIR1" >&2
+    exit 1
+fi
+if [ ! -d "$TRACE_DIR2" ]; then
+    echo "Error: Trace directory not found: $TRACE_DIR2" >&2
+    exit 1
+fi
 
-    # Default report path for auto-discovery
-    REPORT="${POSITIONAL[0]:-$REPO_ROOT/results/${APP_NAME}-nettrace-comparison.md}"
+TRACE1=$(find_latest_trace "$TRACE_DIR1" "$PLATFORM" "$CONFIG1")
+TRACE2=$(find_latest_trace "$TRACE_DIR2" "$PLATFORM" "$CONFIG2")
 
-    echo "Auto-discovered traces:"
-    echo "  $CONFIG1: $FILE1"
-    echo "  $CONFIG2: $FILE2"
-else
-    # --- Direct file mode ---
-    if [ ${#POSITIONAL[@]} -lt 2 ]; then
-        echo "Error: Direct mode requires two .nettrace files" >&2
-        echo "" >&2
-        usage >&2
-        exit 1
-    fi
+echo "Auto-discovered traces:"
+echo "  $CONFIG1: $TRACE1"
+echo "  $CONFIG2: $TRACE2"
 
-    FILE1="${POSITIONAL[0]}"
-    FILE2="${POSITIONAL[1]}"
-    REPORT="${POSITIONAL[2]:-/tmp/nettrace-comparison-report.md}"
+# ---------------------------------------------------------------------------
+# Step 6: Run C# analyzer on each trace
+# ---------------------------------------------------------------------------
+echo ""
+echo "Running nettrace analyzer on $CONFIG1..."
+if ! "$DOTNET" "$ANALYZER_DLL" "$TRACE1" --config-name "$CONFIG1" \
+    > "$OUTPUT_DIR/${CONFIG1}.json" \
+    2>"$OUTPUT_DIR/${CONFIG1}.stderr.log"; then
+    echo "Error: Analyzer failed for $CONFIG1. See $OUTPUT_DIR/${CONFIG1}.stderr.log" >&2
+    exit 1
+fi
 
-    if [ ! -f "$FILE1" ]; then
-        echo "Error: File not found: $FILE1" >&2
-        exit 1
-    fi
-    if [ ! -f "$FILE2" ]; then
-        echo "Error: File not found: $FILE2" >&2
-        exit 1
-    fi
+echo "Running nettrace analyzer on $CONFIG2..."
+if ! "$DOTNET" "$ANALYZER_DLL" "$TRACE2" --config-name "$CONFIG2" \
+    > "$OUTPUT_DIR/${CONFIG2}.json" \
+    2>"$OUTPUT_DIR/${CONFIG2}.stderr.log"; then
+    echo "Error: Analyzer failed for $CONFIG2. See $OUTPUT_DIR/${CONFIG2}.stderr.log" >&2
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Ensure results directory exists for report output
+# Step 7: Generate metadata.json
 # ---------------------------------------------------------------------------
-mkdir -p "$(dirname "$REPORT")"
+TRACE1_ABS=$(realpath "$TRACE1")
+TRACE2_ABS=$(realpath "$TRACE2")
+OUTPUT_DIR_ABS=$(realpath "$OUTPUT_DIR")
+
+cat > "$OUTPUT_DIR/metadata.json" <<EOF
+{
+  "timestamp": "$TIMESTAMP",
+  "app": "$APP",
+  "platform": "$PLATFORM",
+  "configs": ["$CONFIG1", "$CONFIG2"],
+  "traceFiles": {
+    "$CONFIG1": "$TRACE1_ABS",
+    "$CONFIG2": "$TRACE2_ABS"
+  },
+  "outputDir": "$OUTPUT_DIR_ABS/"
+}
+EOF
 
 # ---------------------------------------------------------------------------
-# Run the analyzer via DLL mode (avoids macOS amfid issue)
+# Step 8: Generate jit-diff.json using jq
 # ---------------------------------------------------------------------------
-echo "Running nettrace analyzer..."
-echo "  Report: $REPORT"
-"$DOTNET" "$ANALYZER_DLL" "$FILE1" "$FILE2" "$REPORT"
+if command -v jq &>/dev/null; then
+    echo ""
+    echo "Computing JIT method diff..."
+    jq -n \
+      --slurpfile c1 "$OUTPUT_DIR/${CONFIG1}.json" \
+      --slurpfile c2 "$OUTPUT_DIR/${CONFIG2}.json" \
+      --arg config1 "$CONFIG1" \
+      --arg config2 "$CONFIG2" \
+      '
+      ($c1[0].methods.jit | sort) as $jit1 |
+      ($c2[0].methods.jit | sort) as $jit2 |
+      ($c2[0].methods.jit | map({(.): true}) | add // {}) as $set2 |
+      ($c1[0].methods.jit | map({(.): true}) | add // {}) as $set1 |
+      {
+        config1: $config1,
+        config2: $config2,
+        summary: {
+          jitMethodsConfig1: ($jit1 | length),
+          jitMethodsConfig2: ($jit2 | length),
+          onlyInConfig1: ([$jit1[] | select($set2[.] == null)] | length),
+          onlyInConfig2: ([$jit2[] | select($set1[.] == null)] | length),
+          common: ([$jit1[] | select($set2[.] != null)] | length)
+        },
+        onlyInConfig1: [$jit1[] | select($set2[.] == null)],
+        onlyInConfig2: [$jit2[] | select($set1[.] == null)],
+        common: [$jit1[] | select($set2[.] != null)]
+      }' > "$OUTPUT_DIR/jit-diff.json"
+    JIT_DIFF_GENERATED=true
+else
+    echo ""
+    echo "Warning: jq not found — skipping jit-diff.json generation" >&2
+    JIT_DIFF_GENERATED=false
+fi
+
+# ---------------------------------------------------------------------------
+# Step 9: Print summary to terminal
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Nettrace Analysis Complete ==="
+
+# Relative paths for display
+REL_OUTPUT_DIR="${OUTPUT_DIR#"$REPO_ROOT/"}"
+REL_TRACE1="${TRACE1#"$REPO_ROOT/"}"
+REL_TRACE2="${TRACE2#"$REPO_ROOT/"}"
+
+echo "App:       $APP"
+echo "Platform:  $PLATFORM"
+echo "Configs:   $CONFIG1 vs $CONFIG2"
+echo "Output:    $REL_OUTPUT_DIR/"
+echo ""
+echo "Trace files:"
+echo "  $CONFIG1:$(printf '%*s' $((14 - ${#CONFIG1})) '')$REL_TRACE1"
+echo "  $CONFIG2:$(printf '%*s' $((14 - ${#CONFIG2})) '')$REL_TRACE2"
+echo ""
+echo "Files generated:"
+
+if command -v jq &>/dev/null; then
+    JIT_COUNT1=$(jq '.methods.jit | length' "$OUTPUT_DIR/${CONFIG1}.json")
+    JIT_COUNT2=$(jq '.methods.jit | length' "$OUTPUT_DIR/${CONFIG2}.json")
+    echo "  ${CONFIG1}.json$(printf '%*s' $((21 - ${#CONFIG1} - 5)) '')— $JIT_COUNT1 JIT methods extracted"
+    echo "  ${CONFIG2}.json$(printf '%*s' $((21 - ${#CONFIG2} - 5)) '')— $JIT_COUNT2 JIT methods extracted"
+
+    if [ "$JIT_DIFF_GENERATED" = true ]; then
+        ONLY_C1=$(jq '.summary.onlyInConfig1' "$OUTPUT_DIR/jit-diff.json")
+        ONLY_C2=$(jq '.summary.onlyInConfig2' "$OUTPUT_DIR/jit-diff.json")
+        COMMON=$(jq '.summary.common' "$OUTPUT_DIR/jit-diff.json")
+        echo "  jit-diff.json$(printf '%*s' $((21 - 13)) '')— $ONLY_C2 only in $CONFIG2, $ONLY_C1 only in $CONFIG1, $COMMON common"
+    fi
+else
+    echo "  ${CONFIG1}.json"
+    echo "  ${CONFIG2}.json"
+fi
+
+echo "  metadata.json$(printf '%*s' $((21 - 13)) '')— run metadata"
