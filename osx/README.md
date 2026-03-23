@@ -15,22 +15,16 @@ macOS-specific build configurations, workarounds, and tooling for CoreCLR startu
 
 ## Build Configurations
 
-macOS uses 6 build configurations. Non-composite ReadyToRun (`R2R`) is **not available** on Apple platforms because the MachO binary format only supports Composite R2R images.
+macOS uses 3 build configurations (CoreCLR only). Non-composite ReadyToRun (`R2R`) is **not available** on Apple platforms because the MachO binary format only supports Composite R2R images. Mono is not supported on macOS.
 
-| Config | Runtime | UseMonoRuntime | AOT | Profiled AOT | R2R | R2R Composite | PGO |
-|--------|---------|---------------|-----|-------------|-----|---------------|-----|
-| `MONO_JIT` | Mono | True | No | — | No | No | — |
-| `MONO_AOT` | Mono | True | Yes | No | — | — | — |
-| `MONO_PAOT` | Mono | True | Yes | Yes (default) | — | — | — |
-| `CORECLR_JIT` | CoreCLR | False | No | — | No | No | — |
-| `R2R_COMP` | CoreCLR | False | — | — | Yes | Yes | — |
-| `R2R_COMP_PGO` | CoreCLR | False | — | — | Yes | Yes | Yes |
+| Config | Runtime | UseMonoRuntime | AOT | R2R | R2R Composite | PGO |
+|--------|---------|---------------|-----|-----|---------------|-----|
+| `CORECLR_JIT` | CoreCLR | False | No | No | No | — |
+| `R2R_COMP` | CoreCLR | False | — | Yes | Yes | — |
+| `R2R_COMP_PGO` | CoreCLR | False | — | Yes | Yes | Yes |
 
 ### Configuration Details
 
-- **MONO_JIT** — Mono runtime with JIT compilation only. Baseline for Mono performance.
-- **MONO_AOT** — Mono runtime with full Ahead-of-Time compilation (`RunAOTCompilation=True`, `MtouchProfiledAOT=False`).
-- **MONO_PAOT** — Mono runtime with profiled AOT (`RunAOTCompilation=True`, `MtouchProfiledAOT=True`). This is the default AOT mode that uses profiling data to prioritize which methods to AOT compile.
 - **CORECLR_JIT** — CoreCLR runtime with JIT compilation only. Baseline for CoreCLR performance.
 - **R2R_COMP** — CoreCLR with Composite ReadyToRun images (`PublishReadyToRun=True`, `PublishReadyToRunComposite=True`). Pre-compiled native code for faster startup.
 - **R2R_COMP_PGO** — Composite ReadyToRun with PGO (Profile-Guided Optimization) profiles from `dotnet-optimization` CI for optimized native code layout.
@@ -43,7 +37,6 @@ Apple platforms use the **MachO** binary format, which only supports Composite R
 
 | Property | Description |
 |----------|-------------|
-| `MtouchProfiledAOT` | Controls whether profiled AOT compilation is used. |
 | `UseMonoRuntime` | Selects Mono (`True`) or CoreCLR (`False`) runtime. Same as Android. |
 | `RunAOTCompilation` | Enables AOT compilation. Same as Android. |
 | `PublishReadyToRun` | Enables ReadyToRun compilation. Same as Android. |
@@ -115,7 +108,9 @@ macOS (`osx` platform) supports only the standalone macOS app template:
 ```
 osx/
 ├── README.md                  # This file
-├── build-configs.props        # 6 build configuration presets
+├── build-configs.props        # 3 build configuration presets (CoreCLR only)
 ├── build-workarounds.targets  # macOS-specific build targets
+├── collect_nettrace.sh        # .nettrace trace collection (local, no dsrouter)
+├── measure_osx_startup.sh     # macOS startup measurement
 └── print_app_sizes.sh         # .app bundle size reporting
 ```

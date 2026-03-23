@@ -118,5 +118,7 @@ maccatalyst/
 ├── README.md                  # This file
 ├── build-configs.props        # 6 build configuration presets
 ├── build-workarounds.targets  # Mac Catalyst-specific build targets
+├── collect_nettrace.sh        # .nettrace trace collection (local, no dsrouter)
+├── measure_maccatalyst_startup.sh  # Mac Catalyst startup measurement
 └── print_app_sizes.sh         # .app bundle size reporting
 ```

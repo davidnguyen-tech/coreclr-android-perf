@@ -83,9 +83,9 @@ Supports both physical devices and **emulators/simulators** for development and 
 
 | Config | Android | iOS | macOS | Mac Catalyst |
 |---|---|---|---|---|
-| MONO_JIT | ✅ | ✅ | ✅ | ✅ |
-| MONO_AOT | ✅ | ✅ | ✅ | ✅ |
-| MONO_PAOT | ✅ | ✅ | ✅ | ✅ |
+| MONO_JIT | ✅ | ✅ | ❌ | ✅ |
+| MONO_AOT | ✅ | ✅ | ❌ | ✅ |
+| MONO_PAOT | ✅ | ✅ | ❌ | ✅ |
 | CORECLR_JIT | ✅ | ✅ | ✅ | ✅ |
 | R2R | ✅ | ❌ | ❌ | ❌ |
 | R2R_COMP | ✅ | ✅ | ✅ | ✅ |
@@ -151,6 +151,8 @@ maintaining a separate rollback file.
 - `--use-fully-drawn-time` — Use fully drawn time instead of displayed time
 - `--fully-drawn-extra-delay N` — Extra delay for fully drawn time (seconds)
 - `--trace-perfetto` — Capture a perfetto trace after measurements
+- `--collect-trace` — Collect a .nettrace EventPipe trace (Apple platforms)
+- `--pgo-mibc-dir <path>` — Directory containing `*.mibc` files for R2R_COMP_PGO builds
 
 Results are saved to `results/<app>_<config>.trace`.
 
@@ -320,7 +322,7 @@ Build artifacts are copied to `./build/` for further inspection (APKs, `.app` bu
 ### macOS
 
 - Runs locally on the Mac — no external device needed
-- 6 build configurations (no non-composite R2R)
+- 3 build configurations (CoreCLR only)
 - Apps: `dotnet-new-macos`
 - Package format: `*.app` bundle (directory)
 
@@ -483,6 +485,9 @@ Cleans build artifacts (`bin/`, `obj/`, binlogs) for the specified app or all ap
 ├── measure_all.sh             # Run all configurations (--platform aware)
 ├── clean.sh                   # Clean build artifacts
 ├── dotnet-local.sh            # Proxy to local .NET SDK
+├── download-mibc.sh           # Download PGO .mibc profiles for R2R_COMP_PGO builds
+├── docs/                      # Additional documentation
+│   └── BUILD-CONFIGS.md       #   Detailed build configuration reference
 ├── android/                   # Android-specific files
 │   ├── build-configs.props    #   Build configs (7 configs incl. R2R)
 │   ├── build-workarounds.targets  #   Build workarounds
@@ -491,29 +496,37 @@ Cleans build artifacts (`bin/`, `obj/`, binlogs) for the specified app or all ap
 │   ├── env.txt                #   DiagnosticPorts config for profiling
 │   └── env-nettrace.txt       #   PGO instrumentation env vars
 ├── ios/                       # iOS-specific files
+│   ├── README.md              #   iOS platform documentation
 │   ├── build-configs.props    #   Build configs (6 configs, composite R2R only)
 │   ├── build-workarounds.targets  #   Build workarounds
 │   ├── collect_nettrace.sh    #   .nettrace trace collection (device via dsrouter + USB, simulator via direct socket)
+│   ├── measure_device_startup.sh  #   Physical device startup measurement
 │   ├── measure_simulator_startup.sh  #   Simulator startup measurement (wall-clock)
 │   └── print_app_sizes.sh    #   .app bundle size reporting
 ├── osx/                       # macOS-specific files
-│   ├── build-configs.props    #   Build configs (6 configs, composite R2R only)
+│   ├── README.md              #   macOS platform documentation
+│   ├── build-configs.props    #   Build configs (3 configs, CoreCLR only)
 │   ├── build-workarounds.targets  #   Build workarounds
 │   ├── collect_nettrace.sh    #   .nettrace trace collection (local, no dsrouter)
+│   ├── measure_osx_startup.sh #   macOS startup measurement
 │   └── print_app_sizes.sh    #   .app bundle size reporting
 ├── maccatalyst/               # Mac Catalyst-specific files
+│   ├── README.md              #   Mac Catalyst platform documentation
 │   ├── build-configs.props    #   Build configs (6 configs, composite R2R only)
 │   ├── build-workarounds.targets  #   Build workarounds
 │   ├── collect_nettrace.sh    #   .nettrace trace collection (local, no dsrouter)
+│   ├── measure_maccatalyst_startup.sh  #   Mac Catalyst startup measurement
 │   └── print_app_sizes.sh    #   .app bundle size reporting
 ├── custom-apps/               # User-provided custom apps (git-tracked)
 │   └── hello-custom/          #   Example custom Android app
-├── profiles/                  # Shared PGO .mibc profiles
 ├── external/performance/      # dotnet/performance submodule
 ├── apps/                      # Generated + custom apps (gitignored, populated by prepare.sh)
 ├── .dotnet/                   # Local .NET SDK install (gitignored)
 ├── build/                     # Build artifacts (gitignored)
+├── nettrace-analysis/         # Nettrace analysis output (gitignored)
+├── profiles/                  # Shared PGO .mibc profiles (gitignored)
 ├── traces/                    # Collected .nettrace traces (gitignored)
 ├── results/                   # Measurement results (gitignored)
+├── versions.log               # SDK/workload version log (gitignored)
 └── tools/                     # Tools (dotnet-install.sh, xharness) (gitignored)
 ```

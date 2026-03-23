@@ -24,7 +24,7 @@ property.
 | `CORECLR_JIT` | CoreCLR | None | None | `UseMonoRuntime=False` `RunAOTCompilation=False` `PublishReadyToRun=False` |
 | `R2R` | CoreCLR | None | Non-composite | `UseMonoRuntime=False` `PublishReadyToRun=True` `PublishReadyToRunComposite=False` |
 | `R2R_COMP` | CoreCLR | None | Full Composite | `UseMonoRuntime=False` `PublishReadyToRun=True` `PublishReadyToRunComposite=True` `_MauiPublishReadyToRunPartial=false` |
-| `R2R_COMP_PGO` | CoreCLR | None | Partial Composite + PGO | `UseMonoRuntime=False` `PublishReadyToRun=True` `PublishReadyToRunComposite=True` `PGO=True` `PublishReadyToRunCrossgen2ExtraArgs=--partial` |
+| `R2R_COMP_PGO` | CoreCLR | None | Partial Composite + PGO | `UseMonoRuntime=False` `PublishReadyToRun=True` `PublishReadyToRunComposite=True` `PGO=True` |
 
 ### iOS (`ios/build-configs.props`)
 
