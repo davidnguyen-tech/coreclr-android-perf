@@ -93,15 +93,28 @@ find_latest_trace() {
     local config="$3"
     local pattern="*-${platform}-${config}-*.nettrace"
 
-    local latest
-    latest=$(find "$dir" -maxdepth 1 -name "$pattern" -type f 2>/dev/null | sort | tail -1)
+    # Find candidates: minimum 8 KB (real traces are 8 MB+), sorted newest-last
+    local candidates
+    candidates=$(find "$dir" -maxdepth 1 -name "$pattern" -type f -size +8k 2>/dev/null | sort)
 
-    if [ -z "$latest" ]; then
-        echo "Error: No trace matching '$pattern' found in $dir" >&2
+    if [ -z "$candidates" ]; then
+        echo "Error: No trace matching '$pattern' (>8 KB) found in $dir" >&2
         exit 1
     fi
 
-    echo "$latest"
+    # Walk from newest to oldest; validate nettrace magic header ("Nettrace")
+    local candidate header
+    while IFS= read -r candidate; do
+        header=$(head -c 8 "$candidate" 2>/dev/null)
+        if [ "$header" = "Nettrace" ]; then
+            echo "$candidate"
+            return 0
+        fi
+        echo "Warning: skipping invalid nettrace (bad magic header): $candidate" >&2
+    done < <(echo "$candidates" | sort -r)
+
+    echo "Error: No valid nettrace file found matching '$pattern' in $dir" >&2
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
