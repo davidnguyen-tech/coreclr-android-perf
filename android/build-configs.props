@@ -71,6 +71,5 @@
     <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
     <AndroidEnableMarshalMethods>False</AndroidEnableMarshalMethods>
     <PGO>True</PGO>
-    <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>
   </PropertyGroup>
 </Project>
