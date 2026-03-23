@@ -242,10 +242,12 @@ class Program
         var sb = new StringBuilder();
         sb.AppendLine("# Nettrace Comparison Report: R2R_COMP vs R2R_COMP_PGO");
         sb.AppendLine();
+        sb.AppendLine($"**Generated**: {DateTime.UtcNow:yyyy-MM-ddTHH:mm:ssZ}");
+        sb.AppendLine();
         sb.AppendLine("## Trace Files");
         sb.AppendLine();
-        sb.AppendLine($"- **R2R_COMP**: `{Path.GetFileName(r2rComp.FilePath)}`");
-        sb.AppendLine($"- **R2R_COMP_PGO**: `{Path.GetFileName(r2rCompPgo.FilePath)}`");
+        sb.AppendLine($"- **R2R_COMP**: `{Path.GetFullPath(r2rComp.FilePath)}`");
+        sb.AppendLine($"- **R2R_COMP_PGO**: `{Path.GetFullPath(r2rCompPgo.FilePath)}`");
         sb.AppendLine();
 
         sb.AppendLine("## Summary");
