@@ -1,0 +1,5 @@
+<!-- This file intentionally blocks inheritance from the repo root's Directory.Build.targets.
+     The root file imports platform-specific build-workarounds (android, ios, osx, maccatalyst)
+     that are irrelevant to this standalone net8.0 console tool. -->
+<Project>
+</Project>

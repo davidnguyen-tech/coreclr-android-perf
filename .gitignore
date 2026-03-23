@@ -60,10 +60,12 @@ nunit-*.xml
 .dotnet/
 versions.log
 tools/*
+!tools/analyze-nettrace.sh
 !tools/apple_measure_lib.sh
 !tools/diagnostic_tools_lib.sh
 !tools/validate-nettrace.sh
 !tools/verify-build-config.sh
+!tools/nettrace-analyzer/
 packages/
 build/
 apps/
