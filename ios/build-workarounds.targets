@@ -1,0 +1,42 @@
+<Project>
+  <Target Name="GenerateInfoIos" AfterTargets="Build" Condition="'$(TargetPlatformIdentifier)' == 'ios'">
+    <Message Importance="High" Text="[BuildInfo]:TargetFramework=$(TargetFramework);ObjDir=$(IntermediateOutputPath);OutputDir=$(OutputPath);PackageFilename=$(AssemblyName).app"/>
+  </Target>
+
+  <!--
+    External PGO MIBC directory support.
+
+    Pass -p:_CUSTOM_MIBC_DIR=<path> on the command line to override the app-local
+    profiles/ directory with an external set of *.mibc files for the R2R
+    composite PGO build.
+
+    When _CUSTOM_MIBC_DIR is set, ALL previously accumulated app-local *.mibc items
+    are removed and replaced exclusively with files from _CUSTOM_MIBC_DIR.
+  -->
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios'
+                        And '$(PublishReadyToRun)' == 'true'
+                        And '$(PublishReadyToRunComposite)' == 'true'
+                        And '$(PGO)' == 'true'
+                        And '$(_CUSTOM_MIBC_DIR)' != ''">
+    <_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />
+    <_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />
+  </ItemGroup>
+
+  <!--
+    Guard against empty MIBC profiles in PGO builds.
+
+    When PGO is enabled (R2R_COMP_PGO config), crossgen2 expects at least one
+    .mibc file to guide hot-method optimization.  If no profiles exist — neither
+    app-local (profiles/*.mibc) nor external (_CUSTOM_MIBC_DIR) — the resulting
+    composite R2R image is degenerate and may crash on startup.
+  -->
+  <Target Name="_ValidatePgoProfiles"
+          BeforeTargets="PrepareForReadyToRunCompilation"
+          Condition="'$(TargetPlatformIdentifier)' == 'ios'
+                     And '$(PGO)' == 'true'
+                     And '$(PublishReadyToRun)' == 'true'
+                     And '$(PublishReadyToRunComposite)' == 'true'">
+    <Error Condition="'@(_ReadyToRunPgoFiles)' == ''"
+           Text="PGO is enabled but no .mibc profile files were found. Either add profiles to the app's profiles/ directory, pass -p:_CUSTOM_MIBC_DIR=&lt;path&gt; with a directory containing .mibc files, or use R2R_COMP instead of R2R_COMP_PGO." />
+  </Target>
+</Project>

@@ -3,7 +3,23 @@
     <RestorePackagesPath>$(MSBuildThisFileDirectory)/packages</RestorePackagesPath>
   </PropertyGroup>
 
-  <!-- Platform-specific build configurations -->
+  <!-- Platform-specific build configurations.
+       Each file defines PropertyGroups keyed on _BuildConfig (e.g. R2R_COMP) that set
+       RuntimeIdentifier, TargetFramework, etc. Because the same _BuildConfig names exist
+       across platforms, we gate imports on TargetFramework to avoid conflicting
+       RuntimeIdentifier values (MSBuild last-write-wins). TargetFramework is available
+       as a global property when passed via -f on the command line, which build.sh and
+       collect_nettrace.sh always do. -->
   <Import Project="$(MSBuildThisFileDirectory)/android/build-configs.props"
-          Condition="Exists('$(MSBuildThisFileDirectory)/android/build-configs.props')" />
+          Condition="Exists('$(MSBuildThisFileDirectory)/android/build-configs.props')
+                     And $(TargetFramework.Contains('-android'))" />
+  <Import Project="$(MSBuildThisFileDirectory)/ios/build-configs.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)/ios/build-configs.props')
+                     And $(TargetFramework.Contains('-ios'))" />
+  <Import Project="$(MSBuildThisFileDirectory)/osx/build-configs.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)/osx/build-configs.props')
+                     And $(TargetFramework.Contains('-macos'))" />
+  <Import Project="$(MSBuildThisFileDirectory)/maccatalyst/build-configs.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)/maccatalyst/build-configs.props')
+                     And $(TargetFramework.Contains('-maccatalyst'))" />
 </Project>

@@ -54,9 +54,19 @@ TestResult.xml
 nunit-*.xml
 
 # Custom
+/plan.md
+/task.md
+/rollback.json
 .dotnet/
 versions.log
-tools/
+tools/*
+!tools/analyze-nettrace.sh
+!tools/diff-jit-csvs.sh
+!tools/apple_measure_lib.sh
+!tools/diagnostic_tools_lib.sh
+!tools/validate-nettrace.sh
+!tools/verify-build-config.sh
+!tools/nettrace-analyzer/
 packages/
 build/
 apps/
@@ -64,6 +74,7 @@ apps/
 perfdata/
 traces/
 results/
+nettrace-analysis/
 [Nn]u[Gg]et.config
 profiles/
 profiles-old/

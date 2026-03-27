@@ -1,0 +1,35 @@
+<Project>
+  <!-- macOS only supports CoreCLR — Mono configs are not available on this platform -->
+  <PropertyGroup Condition="'$(_BuildConfig)' == 'CORECLR_JIT'">
+    <Configuration>Release</Configuration>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <TargetFramework>net11.0-macos</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
+    <RunAOTCompilation>False</RunAOTCompilation>
+    <PublishReadyToRun>False</PublishReadyToRun>
+    <PublishReadyToRunComposite>False</PublishReadyToRunComposite>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R_COMP'">
+    <Configuration>Release</Configuration>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <TargetFramework>net11.0-macos</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
+    <_IsPublishing>True</_IsPublishing>
+    <PublishReadyToRun>True</PublishReadyToRun>
+    <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
+    <PublishReadyToRunContainerFormat>macho</PublishReadyToRunContainerFormat>
+    <_MauiPublishReadyToRunPartial>false</_MauiPublishReadyToRunPartial>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_BuildConfig)' == 'R2R_COMP_PGO'">
+    <Configuration>Release</Configuration>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <TargetFramework>net11.0-macos</TargetFramework>
+    <UseMonoRuntime>False</UseMonoRuntime>
+    <_IsPublishing>True</_IsPublishing>
+    <PublishReadyToRun>True</PublishReadyToRun>
+    <PublishReadyToRunComposite>True</PublishReadyToRunComposite>
+    <PublishReadyToRunContainerFormat>macho</PublishReadyToRunContainerFormat>
+    <PGO>True</PGO>
+    <PublishReadyToRunCrossgen2ExtraArgs>--partial</PublishReadyToRunCrossgen2ExtraArgs>
+  </PropertyGroup>
+</Project>

@@ -4,7 +4,6 @@ source "$(dirname "$0")/init.sh"
 
 # Validate passed parameters
 FORCE=false
-USE_ROLLBACK=false
 PLATFORM="android"
 
 while [[ $# -gt 0 ]]; do
@@ -13,13 +12,9 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
-        -userollback)
-            USE_ROLLBACK=true
-            shift
-            ;;
         --platform)
             if [[ -z "$2" || "$2" == --* ]]; then
-                echo "Error: --platform requires a value (android, ios)"
+                echo "Error: --platform requires a value (android, android-emulator, ios, ios-simulator, osx, maccatalyst)"
                 exit 1
             fi
             PLATFORM="$2"
@@ -27,7 +22,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Error: Invalid parameter '$1'."
-            echo "Usage: $0 [-f] [-userollback] [--platform android|ios]"
+            echo "Usage: $0 [-f] [--platform android|android-emulator|ios|ios-simulator|osx|maccatalyst]"
             exit 1
             ;;
     esac
@@ -35,12 +30,33 @@ done
 
 # Validate platform
 case "$PLATFORM" in
-    android|ios) ;;
+    android|android-emulator|ios|ios-simulator|osx|maccatalyst) ;;
     *)
-        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, ios"
+        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, android-emulator, ios, ios-simulator, osx, maccatalyst"
         exit 1
         ;;
 esac
+
+# Register custom apps from custom-apps/ into apps/
+# This runs unconditionally (even without -f) since it is a cheap copy operation.
+CUSTOM_APPS_DIR="$SCRIPT_DIR/custom-apps"
+if [ -d "$CUSTOM_APPS_DIR" ]; then
+    mkdir -p "$APPS_DIR"
+    REGISTERED=0
+    for app_dir in "$CUSTOM_APPS_DIR"/*/; do
+        [ -d "$app_dir" ] || continue
+        app_name=$(basename "$app_dir")
+        echo "Registering custom app: $app_name"
+        rm -rf "$APPS_DIR/$app_name"
+        cp -r "$app_dir" "$APPS_DIR/$app_name"
+        REGISTERED=$((REGISTERED + 1))
+    done
+    if [ $REGISTERED -gt 0 ]; then
+        echo "Registered $REGISTERED custom app(s)."
+    else
+        echo "No custom apps found in custom-apps/."
+    fi
+fi
 
 # Check if environment is already set up
 if [ -d "$DOTNET_DIR" ] && [ -f "$VERSIONS_LOG" ] && [ "$FORCE" = false ]; then
@@ -82,10 +98,17 @@ fi
 rm -rf "$DOTNET_DIR"
 rm -rf "$LOCAL_PACKAGES"
 rm -rf "$BUILD_DIR"
-rm -rf "$APPS_DIR"
+# Selectively delete only known generated app directories (dotnet-new-*)
+# to preserve any custom apps placed in the apps/ directory.
+if [ -d "$APPS_DIR" ]; then
+    for app in "$APPS_DIR"/dotnet-new-*; do
+        [ -e "$app" ] && rm -rf "$app"
+    done
+fi
+mkdir -p "$APPS_DIR"
 rm -f "$VERSIONS_LOG"
-# Clean tool binaries (keep dotnet-install.sh)
-find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "dotnet-install.sh" -exec rm -f {} \; 2>/dev/null
+# Clean tool binaries (keep all .sh source files — scripts are source code, not downloaded tools)
+find "$TOOLS_DIR" -maxdepth 1 -type f ! -name "*.sh" -exec rm -f {} \; 2>/dev/null
 find "$TOOLS_DIR" -maxdepth 1 -type d ! -path "$TOOLS_DIR" -exec rm -rf {} \; 2>/dev/null
 
 mkdir -p "$LOCAL_PACKAGES"
@@ -107,46 +130,51 @@ if [ $? -ne 0 ]; then
     echo "Warning: Failed to install .NET 8 runtime. Startup result parsing may fail."
 fi
 
-# Download NuGet.config file from dotnet/android repo
-curl -L -o "$NUGET_CONFIG" https://raw.githubusercontent.com/dotnet/android/main/NuGet.config
-if [ $? -ne 0 ] || [ ! -f "$NUGET_CONFIG" ]; then
-    echo "Error: Failed to download or locate NuGet.config file."
-    exit 1
-fi
-
 # Setup workload to take the latest manifests
 "$LOCAL_DOTNET" workload config --update-mode manifests
 
-if [ "$USE_ROLLBACK" = true ]; then
-    "$LOCAL_DOTNET" workload update --from-rollback-file "$SCRIPT_DIR/rollback.json"
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to apply workload rollback."
-        exit 1
-    fi
-fi
-
 # Install platform-specific workloads
-if [ "$PLATFORM" = "android" ]; then
-    WORKLOADS="android maui-android"
-elif [ "$PLATFORM" = "ios" ]; then
-    WORKLOADS="ios maui-ios"
-fi
+case "$PLATFORM" in
+    android|android-emulator)
+                  WORKLOADS="android maui-android" ;;
+    ios|ios-simulator)
+                  WORKLOADS="ios maui-ios" ;;
+    osx)          WORKLOADS="macos" ;;
+    maccatalyst)  WORKLOADS="maccatalyst maui-maccatalyst ios" ;;
+esac
 echo "Installing workloads for $PLATFORM: $WORKLOADS"
-"$LOCAL_DOTNET" workload install $WORKLOADS
+
+# Allow manifest updates so workload versions align with the SDK's runtime.
+# The SDK-bundled manifests can lag behind (e.g. Preview 1 workload with a
+# Preview 3 runtime), causing P/Invoke crashes for APIs added after the bundled
+# version (e.g. SystemNative_LowLevelFutex_WaitOnAddressTimeout).
+# --include-previews is required because preview SDKs need preview workload
+# manifests, which are excluded from resolution by default.
+"$LOCAL_DOTNET" workload install $WORKLOADS --include-previews
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install workloads."
     exit 1
 fi
 
+# Map platform name to primary workload ID for verification
+case "$PLATFORM" in
+    android|android-emulator)
+                  WORKLOAD_ID="android" ;;
+    ios|ios-simulator)
+                  WORKLOAD_ID="ios" ;;
+    osx)          WORKLOAD_ID="macos" ;;
+    maccatalyst)  WORKLOAD_ID="maccatalyst" ;;
+esac
+
 # Log installed workload info
 INSTALLED_WORKLOADS=$("$LOCAL_DOTNET" workload --info)
-PLATFORM_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[$PLATFORM\]")
+PLATFORM_WORKLOAD_INFO=$(echo "$INSTALLED_WORKLOADS" | grep -A 4 "\[$WORKLOAD_ID\]")
 if [ -n "$PLATFORM_WORKLOAD_INFO" ]; then
     PLATFORM_MANIFEST_VERSION=$(echo "$PLATFORM_WORKLOAD_INFO" | grep "Manifest Version" | awk '{print $3}')
-    echo "dotnet $PLATFORM workload manifest version: $PLATFORM_MANIFEST_VERSION" >> "$VERSIONS_LOG"
+    echo "dotnet $WORKLOAD_ID workload manifest version: $PLATFORM_MANIFEST_VERSION" >> "$VERSIONS_LOG"
 else
-    echo "$PLATFORM workload not installed"
-    echo "Fatal error: $PLATFORM workload installation failed. Please retry running this script with the -f parameter to reset the environment."
+    echo "$WORKLOAD_ID workload not installed"
+    echo "Fatal error: $WORKLOAD_ID workload installation failed. Please retry running this script with the -f parameter to reset the environment."
     exit 1
 fi
 
@@ -187,7 +215,7 @@ fi
 
 # Generate sample apps
 echo "Generating sample apps..."
-"$SCRIPT_DIR/generate-apps.sh"
+"$SCRIPT_DIR/generate-apps.sh" --platform "$PLATFORM"
 if [ $? -ne 0 ]; then
     echo "Error: Failed to generate sample apps."
     exit 1

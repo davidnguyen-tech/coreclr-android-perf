@@ -1,0 +1,6 @@
+<!-- This file intentionally blocks inheritance from the repo root's Directory.Build.props.
+     The root file imports platform-specific build-configs (android, ios, osx, maccatalyst)
+     that set RuntimeIdentifier, TargetFramework conditions, and RestorePackagesPath — all of
+     which would break this standalone net8.0 console tool. -->
+<Project>
+</Project>

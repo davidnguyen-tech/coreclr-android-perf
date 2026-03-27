@@ -1,5 +1,5 @@
 <Project>
-  <Target Name="GenerateInfo" AfterTargets="Build">
+  <Target Name="GenerateInfoAndroid" AfterTargets="Build" Condition="'$(TargetPlatformIdentifier)' == 'android'">
     <Message Importance="High" Text="[BuildInfo]:TargetFramework=$(TargetFramework);ObjDir=$(IntermediateOutputPath);OutputDir=$(OutputPath);PackageFilename=$(_AndroidPackage)-Signed.$(AndroidPackageFormat)"/>
   </Target>
   <Target Name="_PreventRunningRemoveRegisterAttributeTaskBefore" BeforeTargets="_RemoveRegisterAttribute"
@@ -16,5 +16,55 @@
       <AndroidStripILAfterAOT>$(_AndroidStripILAfterAOTBackup)</AndroidStripILAfterAOT>
     </PropertyGroup>
     <Message Importance="High" Text="Resetting the value of AndroidStripILAfterAOT to original value: '$(_AndroidStripILAfterAOTBackup)'"/>
+  </Target>
+
+  <!--
+    External PGO MIBC directory support.
+
+    Pass -p:_CUSTOM_MIBC_DIR=<path> on the command line to override the app-local
+    profiles/ directory with an external set of *.mibc files for the R2R
+    composite PGO build.
+
+    Example:
+      dotnet build -p:_BuildConfig=R2R_COMP_PGO \
+          -p:_CUSTOM_MIBC_DIR=/path/to/mibc/android-x64-ci-20260316.2 ...
+
+    When _CUSTOM_MIBC_DIR is set, ALL previously accumulated app-local *.mibc items
+    are removed and replaced exclusively with files from _CUSTOM_MIBC_DIR.  This
+    guarantees that the external directory is the sole PGO input — no silent
+    merging with app-local profiles/ entries.  The property is Android-scoped
+    and only takes effect when PublishReadyToRunComposite + PGO are both enabled.
+  -->
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'
+                        And '$(PublishReadyToRun)' == 'true'
+                        And '$(PublishReadyToRunComposite)' == 'true'
+                        And '$(PGO)' == 'true'
+                        And '$(_CUSTOM_MIBC_DIR)' != ''">
+    <!-- Remove any app-local profiles added by the .csproj before injecting
+         the external directory so crossgen2 sees only the external MIBC files. -->
+    <_ReadyToRunPgoFiles Remove="@(_ReadyToRunPgoFiles)" />
+    <_ReadyToRunPgoFiles Include="$(_CUSTOM_MIBC_DIR)/*.mibc" />
+  </ItemGroup>
+
+  <!--
+    Guard against empty MIBC profiles in PGO builds.
+
+    When PGO is enabled (R2R_COMP_PGO config), crossgen2 expects at least one
+    .mibc file to guide hot-method optimization.  If no profiles exist — neither
+    app-local (profiles/*.mibc) nor external (_CUSTOM_MIBC_DIR) — the resulting
+    composite R2R image is degenerate and may crash on startup.
+
+    This target fires after all _ReadyToRunPgoFiles sources have been evaluated
+    (csproj ItemGroup at eval time + _CUSTOM_MIBC_DIR injection above) but before
+    crossgen2 begins compilation, providing a clear build-time error.
+  -->
+  <Target Name="_ValidatePgoProfiles"
+          BeforeTargets="PrepareForReadyToRunCompilation"
+          Condition="'$(TargetPlatformIdentifier)' == 'android'
+                     And '$(PGO)' == 'true'
+                     And '$(PublishReadyToRun)' == 'true'
+                     And '$(PublishReadyToRunComposite)' == 'true'">
+    <Error Condition="'@(_ReadyToRunPgoFiles)' == ''"
+           Text="PGO is enabled but no .mibc profile files were found. Either add profiles to the app's profiles/ directory, pass -p:_CUSTOM_MIBC_DIR=&lt;path&gt; with a directory containing .mibc files, or use R2R_COMP instead of R2R_COMP_PGO." />
   </Target>
 </Project>

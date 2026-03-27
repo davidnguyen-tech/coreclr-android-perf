@@ -1,0 +1,233 @@
+#!/bin/bash
+set -euo pipefail
+
+# Downloads MIBC (Managed Image Based Compilation) profile packages from
+# NuGet feeds and extracts .mibc files to the profiles/ directory.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROFILES_DIR="$SCRIPT_DIR/profiles"
+VERSIONS_LOG="$SCRIPT_DIR/versions.log"
+
+# NuGet V3 flat container base URLs, tried in order until the package is found.
+# Override with --feed <url>.
+DEFAULT_FEEDS=(
+    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10-transport/nuget/v3/flat2"
+    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/flat2"
+)
+CUSTOM_FEED=""
+
+# --- Argument Parsing ---
+
+PLATFORM="android"
+VERSION=""
+
+usage() {
+    echo "Usage: $0 [--platform <platform>] [--version <version>] [--help]"
+    echo ""
+    echo "Downloads MIBC profile packages for the specified platform."
+    echo ""
+    echo "Options:"
+    echo "  --platform <platform>  Target platform: android, android-emulator, ios, ios-simulator, maccatalyst, osx (default: android)"
+    echo "  --version <version>    Specific NuGet package version (default: latest available)"
+    echo "  --feed <url>           NuGet V3 flat container base URL (default: try dotnet10-transport, dotnet-tools)"
+    echo "  --help                 Print this help message and exit"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --platform)
+            if [[ -z "${2:-}" || "$2" == --* ]]; then
+                echo "Error: --platform requires a value (android, android-emulator, ios, ios-simulator, maccatalyst, osx)"
+                exit 1
+            fi
+            PLATFORM="$2"
+            shift 2
+            ;;
+        --version)
+            if [[ -z "${2:-}" || "$2" == --* ]]; then
+                echo "Error: --version requires a value"
+                exit 1
+            fi
+            VERSION="$2"
+            shift 2
+            ;;
+        --feed)
+            if [[ -z "${2:-}" || "$2" == --* ]]; then
+                echo "Error: --feed requires a URL value"
+                exit 1
+            fi
+            CUSTOM_FEED="$2"
+            shift 2
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Error: Invalid parameter '$1'."
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate platform and map to RID.
+# Simulator/emulator variants fall back to device RIDs because MIBC profiles
+# are only produced for device architectures.
+case "$PLATFORM" in
+    android)          RID="android-x64" ;;
+    android-emulator)
+        RID="android-x64"
+        echo "Note: Using android-x64 profiles for emulator (only android-x64 MIBC training data available)"
+        ;;
+    ios)              RID="ios-arm64" ;;
+    ios-simulator)
+        RID="ios-arm64"
+        echo "Note: Using ios-arm64 profiles for simulator (MIBC profiles are device-only)"
+        ;;
+    maccatalyst)      RID="maccatalyst-arm64" ;;
+    osx)              RID="osx-arm64" ;;
+    *)
+        echo "Error: Unsupported platform '$PLATFORM'. Supported: android, android-emulator, ios, ios-simulator, maccatalyst, osx"
+        exit 1
+        ;;
+esac
+
+PACKAGE_ID="optimization.${RID}.MIBC.Runtime"
+PACKAGE_ID_LOWER=$(echo "$PACKAGE_ID" | tr '[:upper:]' '[:lower:]')
+
+echo "MIBC Profile Download"
+echo "Platform: $PLATFORM → RID: $RID"
+echo "Package: $PACKAGE_ID"
+
+# --- Temp file cleanup ---
+
+TEMP_NUPKG=""
+cleanup() {
+    if [ -n "$TEMP_NUPKG" ] && [ -f "$TEMP_NUPKG" ]; then
+        rm -f "$TEMP_NUPKG"
+    fi
+}
+trap cleanup EXIT
+
+# --- Feed Discovery & Version Resolution ---
+
+if [ -n "$CUSTOM_FEED" ]; then
+    FEED_URLS=("$CUSTOM_FEED")
+else
+    FEED_URLS=("${DEFAULT_FEEDS[@]}")
+fi
+
+if [ -z "$VERSION" ]; then
+    echo "Querying latest version..."
+else
+    echo "Verifying version $VERSION..."
+fi
+
+FEED_BASE_URL=""
+HTTP_BODY=""
+
+for feed_url in "${FEED_URLS[@]}"; do
+    INDEX_URL="${feed_url}/${PACKAGE_ID_LOWER}/index.json"
+    feed_name="${feed_url#*_packaging/}"
+    feed_name="${feed_name%%/*}"
+    echo "  Trying feed: $feed_name"
+
+    HTTP_RESPONSE=$(curl -sL -w "\n%{http_code}" "$INDEX_URL") || {
+        echo "    → Connection failed, skipping"
+        continue
+    }
+
+    HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+
+    if [ "$HTTP_STATUS" = "200" ]; then
+        FEED_BASE_URL="$feed_url"
+        HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+        echo "    → Found on $feed_name"
+        break
+    elif [ "$HTTP_STATUS" = "404" ]; then
+        echo "    → Not found (404)"
+    else
+        echo "    → HTTP $HTTP_STATUS, skipping"
+    fi
+done
+
+if [ -z "$FEED_BASE_URL" ]; then
+    echo "Warning: Package $PACKAGE_ID not found on any NuGet feed."
+    echo "Feeds tried: ${FEED_URLS[*]}"
+    echo "MIBC profiles are optional — crossgen2 --partial will proceed without them."
+    exit 0
+fi
+
+if [ -z "$VERSION" ]; then
+    VERSION=$(echo "$HTTP_BODY" | python3 -c "import sys,json; versions=json.load(sys.stdin)['versions']; print(versions[-1])")
+    if [ -z "$VERSION" ]; then
+        echo "Error: Failed to resolve latest version from package index."
+        exit 1
+    fi
+else
+    # Verify the specified version exists
+    AVAILABLE_VERSIONS=$(echo "$HTTP_BODY" | python3 -c "
+import sys, json
+versions = json.load(sys.stdin)['versions']
+target = sys.argv[1]
+if target in versions:
+    print('__FOUND__')
+else:
+    print('Available versions:')
+    for v in versions:
+        print(f'  - {v}')
+" "$VERSION")
+    if [ "$AVAILABLE_VERSIONS" != "__FOUND__" ]; then
+        echo "Error: Version $VERSION not found for package $PACKAGE_ID."
+        echo "$AVAILABLE_VERSIONS"
+        exit 1
+    fi
+fi
+
+echo "Version: $VERSION"
+
+# --- Download and Extract ---
+
+# NuGet V3 flat container spec requires lowercased versions in URLs
+VERSION_LOWER=$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')
+NUPKG_URL="${FEED_BASE_URL}/${PACKAGE_ID_LOWER}/${VERSION_LOWER}/${PACKAGE_ID_LOWER}.${VERSION_LOWER}.nupkg"
+
+echo "Downloading $PACKAGE_ID v${VERSION}..."
+
+TEMP_NUPKG=$(mktemp "${TMPDIR:-/tmp}/mibc-nupkg-XXXXXX.zip")
+
+if ! curl -sfL -o "$TEMP_NUPKG" "$NUPKG_URL"; then
+    echo "Error: Failed to download $NUPKG_URL"
+    exit 1
+fi
+
+echo "Extracting MIBC profiles to profiles/..."
+
+mkdir -p "$PROFILES_DIR"
+
+# Extract .mibc files from data/ directory within the nupkg (ZIP format)
+# -j: junk paths (don't recreate directory structure)
+# -o: overwrite existing files
+unzip -j -o "$TEMP_NUPKG" 'data/*.mibc' -d "$PROFILES_DIR" 2>/dev/null || true
+
+# Check if any .mibc files were extracted
+MIBC_FILES=()
+while IFS= read -r -d '' f; do
+    MIBC_FILES+=("$f")
+done < <(find "$PROFILES_DIR" -maxdepth 1 -name "*.mibc" -print0 2>/dev/null)
+
+if [ ${#MIBC_FILES[@]} -eq 0 ]; then
+    echo "Warning: No .mibc files found in the nupkg. The package may not contain MIBC profiles."
+    echo "MIBC profiles are optional — crossgen2 --partial will proceed without them."
+    exit 0
+fi
+
+echo "✅ Downloaded ${#MIBC_FILES[@]} MIBC profile(s):"
+for f in "${MIBC_FILES[@]}"; do
+    echo "  - ${f#"$SCRIPT_DIR/"}"
+done
+
+# --- Update versions.log ---
+
+echo "MIBC Profile: $PACKAGE_ID v$VERSION" >> "$VERSIONS_LOG"
