@@ -16,11 +16,16 @@ fi
 
 # Usage
 print_usage() {
-    echo "Usage: $0 <dotnet-new-android|dotnet-new-maui|dotnet-new-maui-samplecontent> <build-config> [options]"
+    echo "Usage: $0 <app-name> <build-config> [options]"
+    echo "       $0 --csproj <path> <build-config> [options]"
+    echo ""
+    echo "When --csproj is provided, <app-name> is derived from the .csproj filename"
+    echo "and can be omitted. Provide <app-name> explicitly to override the derived name."
     echo ""
     echo "Build configs: MONO_JIT, CORECLR_JIT, MONO_AOT, MONO_PAOT, R2R, R2R_COMP, R2R_COMP_PGO"
     echo ""
     echo "Options:"
+    echo "  --csproj <path>               Path to a .csproj file (for external/arbitrary MAUI apps)"
     echo "  --platform <android|android-emulator|ios|ios-simulator|osx|maccatalyst>      Target platform (default: android)"
     echo "  --prebuilt                    Measure a pre-built binary (skip build step)"
     echo "  --package-path <path>         Path to pre-built package (.apk, .app, .ipa)"
@@ -35,13 +40,71 @@ print_usage() {
     exit 1
 }
 
-if [[ -z "$1" || -z "$2" ]]; then
-    print_usage
-fi
+# Pre-scan for --csproj (must be extracted before consuming positional args,
+# because it makes <app-name> optional and changes positional arg count)
+CSPROJ_PATH=""
+_PRESCAN_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --csproj)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --csproj requires a path to a .csproj file"
+                exit 1
+            fi
+            if [ ! -f "$2" ]; then
+                echo "Error: .csproj file not found: $2"
+                exit 1
+            fi
+            # Resolve to absolute path
+            CSPROJ_PATH="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+            shift 2
+            ;;
+        *)
+            _PRESCAN_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${_PRESCAN_ARGS[@]}"
 
-SAMPLE_APP=$1
-BUILD_CONFIG=$2
-shift 2
+# When --csproj is provided, derive app name and directory from the csproj path;
+# <app-name> becomes optional (only <build-config> is required positionally)
+if [ -n "$CSPROJ_PATH" ]; then
+    CSPROJ_APP_NAME="$(basename "$CSPROJ_PATH" .csproj)"
+    CSPROJ_APP_DIR="$(dirname "$CSPROJ_PATH")"
+
+    # Count leading positional args (those before the first --flag).
+    # This distinguishes "R2R --platform android" (1 positional) from
+    # "my-app R2R --platform android" (2 positionals).
+    _LEADING_POS=0
+    for _arg in "$@"; do
+        [[ "$_arg" == --* ]] && break
+        _LEADING_POS=$((_LEADING_POS + 1))
+    done
+
+    if [[ $_LEADING_POS -ge 2 ]]; then
+        # Both <app-name> and <build-config> provided — use explicit app name
+        SAMPLE_APP=$1
+        BUILD_CONFIG=$2
+        shift 2
+    elif [[ $_LEADING_POS -eq 1 ]]; then
+        # Only <build-config> provided — derive app name from csproj
+        SAMPLE_APP="$CSPROJ_APP_NAME"
+        BUILD_CONFIG=$1
+        shift 1
+    else
+        echo "Error: <build-config> is required."
+        print_usage
+    fi
+else
+    # Standard mode: both <app-name> and <build-config> are required
+    if [[ -z "$1" || -z "$2" ]]; then
+        print_usage
+    fi
+    SAMPLE_APP=$1
+    BUILD_CONFIG=$2
+    shift 2
+fi
 
 # Parse options to extract --platform before passing remaining args to test.py
 PLATFORM="android"
@@ -200,10 +263,14 @@ if [ "$PREBUILT" = true ]; then
     echo "Bundle ID: $PACKAGE_NAME"
 else
     # --- Standard build mode ---
-    APP_DIR="$APPS_DIR/$SAMPLE_APP"
-    if [ ! -d "$APP_DIR" ]; then
-        echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."
-        exit 1
+    if [ -n "$CSPROJ_PATH" ]; then
+        APP_DIR="$CSPROJ_APP_DIR"
+    else
+        APP_DIR="$APPS_DIR/$SAMPLE_APP"
+        if [ ! -d "$APP_DIR" ]; then
+            echo "Error: App directory $APP_DIR does not exist. Run ./prepare.sh first."
+            exit 1
+        fi
     fi
 
     # Build config determines all MSBuild properties (including UseMonoRuntime)
@@ -218,8 +285,15 @@ else
         MSBUILD_ARGS="$MSBUILD_ARGS -p:_CUSTOM_MIBC_DIR=$PGO_MIBC_DIR"
     fi
 
+    # Determine the .csproj path for build and package name extraction
+    if [ -n "$CSPROJ_PATH" ]; then
+        BUILD_CSPROJ="$CSPROJ_PATH"
+    else
+        BUILD_CSPROJ="$APP_DIR/$SAMPLE_APP.csproj"
+    fi
+
     # Determine package name from the csproj
-    PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$APP_DIR/$SAMPLE_APP.csproj" | sed 's/<ApplicationId>//')
+    PACKAGE_NAME=$(grep -o '<ApplicationId>[^<]*' "$BUILD_CSPROJ" | sed 's/<ApplicationId>//')
     if [ -z "$PACKAGE_NAME" ]; then
         # Fallback for android template
         PACKAGE_NAME="com.companyname.$(echo "$SAMPLE_APP" | tr '-' '_')"
@@ -236,7 +310,7 @@ else
     # Build the package
     ${LOCAL_DOTNET} build -c Release -f "$PLATFORM_TFM" -r "$PLATFORM_RID" \
         -bl:"$BUILD_DIR/${SAMPLE_APP}_${BUILD_CONFIG}.binlog" \
-        "$APP_DIR/$SAMPLE_APP.csproj" \
+        "$BUILD_CSPROJ" \
         $MSBUILD_ARGS
 
     if [ $? -ne 0 ]; then
